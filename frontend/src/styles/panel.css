@@ -1,0 +1,266 @@
+.panel-cuerpo {
+  max-width: 980px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 40px clamp(14px, 4vw, 24px) 10px;
+}
+
+.panel-tarjeta {
+  position: relative;
+  background: linear-gradient(180deg, #fff 0%, #fffcf7 100%);
+  border: 1px solid var(--nude);
+  border-radius: 24px;
+  padding: 28px clamp(20px, 3vw, 34px);
+  margin-bottom: 24px;
+  box-shadow: var(--sombra-suave);
+  overflow-x: auto;
+}
+
+.panel-tarjeta h2 {
+  font-size: 1.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+/* Tarjeta de acceso al catálogo con la foto del salón en arco */
+.panel-tarjeta-catalogo {
+  padding-right: clamp(20px, 34%, 300px);
+  min-height: 190px;
+  overflow: hidden;
+}
+
+.panel-tarjeta-catalogo::after {
+  content: "";
+  position: absolute;
+  top: 16px;
+  bottom: -30px;
+  right: 30px;
+  width: min(28%, 220px);
+  border-radius: 999px 999px 0 0;
+  border: 4px solid #fff;
+  outline: 1px solid var(--dorado-claro);
+  outline-offset: 5px;
+  background: url("../assets/salon-nicolett.jpg") 30% center / cover no-repeat;
+}
+
+.panel-tarjeta-catalogo h2 {
+  font-family: var(--fuente-script);
+  font-weight: 400;
+  font-size: 2.4rem;
+  letter-spacing: 0;
+  color: var(--dorado-oscuro);
+}
+
+@media (max-width: 560px) {
+  .panel-tarjeta-catalogo {
+    padding-right: 20px;
+  }
+  .panel-tarjeta-catalogo::after {
+    display: none;
+  }
+}
+
+.panel-tarjeta p.descripcion {
+  color: var(--color-tinta-suave);
+  font-size: 0.9rem;
+  margin: 0 0 18px 0;
+}
+
+.panel-dato-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.panel-dato label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-tinta-suave);
+  margin-bottom: 3px;
+}
+
+.panel-dato span {
+  font-size: 0.98rem;
+}
+
+.panel-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.panel-tabla th {
+  text-align: left;
+  font-size: 0.72rem;
+  color: var(--color-tinta-suave);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-crema-suave);
+}
+
+.panel-tabla td {
+  padding: 10px 10px;
+  border-bottom: 1px solid var(--color-crema-suave);
+}
+
+.estado-pill {
+  white-space: nowrap;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.estado-activo {
+  background: #e7f0e9;
+  color: var(--color-exito);
+}
+
+.estado-inactivo {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.panel-boton-chico {
+  display: inline-block;
+  background: none;
+  border: 1px solid var(--nude-hondo);
+  border-radius: 999px;
+  padding: 6px 15px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: var(--cacao);
+  text-decoration: none;
+}
+
+.panel-tarjeta-catalogo .panel-boton-chico {
+  background: var(--cacao);
+  border-color: var(--cacao);
+  color: var(--marfil);
+  padding: 10px 22px;
+  font-size: 0.9rem;
+}
+
+.panel-tarjeta-catalogo .panel-boton-chico:hover {
+  background: var(--tinta);
+}
+
+.panel-boton-chico:hover {
+  border-color: var(--color-dorado);
+}
+
+.panel-boton-chico:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.panel-boton-primario {
+  background: var(--cacao);
+  color: var(--color-crema);
+  border-color: var(--color-tinta);
+}
+
+.panel-boton-primario:hover:not(:disabled) {
+  background: var(--color-dorado-oscuro);
+  border-color: var(--color-dorado-oscuro);
+}
+
+.panel-tarjeta-encabezado {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.panel-nota-correo {
+  margin-top: 18px;
+  margin-bottom: 0;
+  font-size: 0.82rem;
+}
+
+.panel-form-edicion {
+  margin-top: 6px;
+}
+
+.panel-form-fila {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.panel-campo label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-tinta-suave);
+  margin-bottom: 5px;
+}
+
+.panel-campo input,
+.panel-campo select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-nude);
+  border-radius: var(--radio-borde);
+  background: #fff;
+  font-size: 0.92rem;
+  color: var(--color-tinta);
+}
+
+.panel-campo input:focus {
+  border-color: var(--color-dorado);
+  outline: none;
+}
+
+.panel-form-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.panel-boton-guardar {
+  width: auto;
+  margin-top: 0;
+  padding: 9px 20px;
+}
+
+.panel-tabla-acciones {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fila-edicion td {
+  background: var(--color-crema-suave);
+  vertical-align: top;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.fila-edicion input {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--color-nude);
+  border-radius: var(--radio-borde);
+  font-size: 0.86rem;
+  background: #fff;
+}
+
+.fila-edicion input:focus {
+  border-color: var(--color-dorado);
+  outline: none;
+}
+
+.panel-fila-doble {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 140px;
+}
+
+.panel-botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

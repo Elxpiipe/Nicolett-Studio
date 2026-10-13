@@ -1,0 +1,195 @@
+/* ==========================================================
+   Integraciones (Google Calendar)
+   ========================================================== */
+
+.integ-grilla {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  align-items: start;
+}
+
+.integ-ancho {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 860px) {
+  .integ-grilla {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.integ-paso {
+  margin: 0 0 2px;
+  font-family: var(--fuente-script);
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--dorado-oscuro);
+}
+
+.integ-ok,
+.integ-pendiente,
+.integ-error {
+  margin: 10px 0 0;
+  font-size: 0.9rem;
+}
+
+.integ-ok {
+  color: var(--exito);
+}
+
+.integ-pendiente {
+  color: var(--dorado-oscuro);
+}
+
+.integ-error {
+  color: var(--error);
+}
+
+.integ-correo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--marfil-hondo);
+  border: 1px solid var(--nude);
+}
+
+.integ-correo code,
+.bloque code {
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.integ-correo code {
+  flex: 1;
+}
+
+.integ-modos {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0 16px;
+}
+
+.integ-modo {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--nude);
+  background: #fff;
+  cursor: pointer;
+}
+
+.integ-modo input {
+  margin-top: 4px;
+  accent-color: var(--dorado-oscuro);
+}
+
+.integ-modo strong {
+  display: block;
+  font-weight: 500;
+}
+
+.integ-modo small {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--tinta-suave);
+  margin-top: 2px;
+}
+
+.integ-modo-activo {
+  border-color: var(--dorado);
+  background: #fffaf1;
+}
+
+.integ-calendarios {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.integ-calendarios li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid var(--nude);
+}
+
+.integ-calendarios small {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--tinta-suave);
+}
+
+.cal-punto {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.cal-ok .cal-punto {
+  background: var(--exito);
+}
+
+.cal-error .cal-punto {
+  background: var(--error);
+}
+
+.integ-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.integ-pruebas {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+
+.integ-pruebas li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.integ-ocupacion {
+  margin-top: 18px;
+  overflow-x: auto;
+}
+
+.integ-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+  margin-top: 10px;
+}
+
+.integ-tabla th,
+.integ-tabla td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid #f0e6d9;
+  white-space: nowrap;
+}
+
+.integ-tabla th {
+  font-weight: 500;
+  color: var(--tinta-suave);
+}

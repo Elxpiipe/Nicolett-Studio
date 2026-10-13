@@ -1,0 +1,35 @@
+{
+  "name": "nicolett-sync-backend",
+  "version": "1.0.0",
+  "description": "API de autenticacion y gestion de usuarios (Clientes, Profesionales, Administrador) para Nicolett Studio Fantasy",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "db:init": "node db/init.js",
+    "seed:servicios": "node db/seed-servicios.js",
+    "seed:demo": "node db/seed-demo-agenda.js",
+    "crear-admin": "node db/seed-admin.js",
+    "demo": "npm run db:init && npm run seed:servicios && npm run seed:demo && node db/seed-demo-cuentas.js && npm run seed:productos && npm run seed:promociones",
+    "seed:productos": "node db/seed-productos-nicolett.js",
+    "seed:productos-demo": "node db/seed-productos-demo.js",
+    "seed:promociones": "node db/seed-promociones-demo.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.3.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-validator": "^7.2.0",
+    "google-auth-library": "^11.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.4.0",
+    "nodemailer": "^6.10.1",
+    "transbank-sdk": "^6.1.1"
+  },
+  "engines": {
+    "node": ">=20 <23"
+  }
+}

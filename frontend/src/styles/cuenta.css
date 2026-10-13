@@ -1,0 +1,355 @@
+/* ==========================================================
+   Cuenta de la clienta: Mis citas y Mis pedidos
+   ========================================================== */
+
+@import "./gestion.css";
+
+.cuenta {
+  max-width: 960px;
+}
+
+.cuenta-subtitulo {
+  font-weight: 700;
+  font-size: 1.3rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 8px 0 14px;
+}
+
+.cuenta-seccion {
+  margin-top: 40px;
+}
+
+.gestion-vacio .boton {
+  margin-top: 12px;
+}
+
+/* ---------- Proximas citas ---------- */
+
+.citas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cita {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: start;
+  padding: 18px 20px;
+  background: linear-gradient(180deg, #fff 0%, #fffcf7 100%);
+  border: 1px solid var(--nude);
+  border-radius: 24px;
+  box-shadow: var(--sombra-suave);
+}
+
+.cita-pendiente {
+  border-color: var(--dorado-claro);
+}
+
+.cita-fecha {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0 12px;
+  border-radius: 999px 999px 18px 18px;
+  background: var(--oro);
+  color: var(--cacao);
+}
+
+.cita-dia {
+  font-family: var(--fuente-display);
+  font-weight: 700;
+  font-size: 2.1rem;
+  line-height: 1;
+  font-variant-numeric: lining-nums;
+}
+
+.cita-mes {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+.cita-hora {
+  margin-top: 6px;
+  font-weight: 500;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cita-servicio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-family: var(--fuente-display);
+  font-weight: 700;
+  font-size: 1.3rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cita-icono {
+  width: 26px;
+  height: 26px;
+  color: var(--dorado);
+  flex-shrink: 0;
+}
+
+.cita-detalle {
+  margin: 2px 0 0;
+  font-size: 0.88rem;
+  color: var(--tinta-suave);
+}
+
+.cita-detalle::first-letter {
+  text-transform: uppercase;
+}
+
+.cita-regla {
+  display: inline-block;
+  margin: 10px 0 0;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 0.84rem;
+  background: var(--exito-fondo);
+  color: var(--exito);
+}
+
+.cita-regla-cerrada {
+  background: #fbf1df;
+  color: var(--dorado-oscuro);
+}
+
+.cita-acciones {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.cita-cancelar {
+  color: var(--error);
+  text-decoration-color: rgba(156, 61, 79, 0.35);
+}
+
+.cita-wsp {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (max-width: 720px) {
+  .cita {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+  .cita-acciones {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .cita-dia {
+    font-size: 1.7rem;
+  }
+}
+
+/* ---------- Historial ---------- */
+
+.historial {
+  list-style: none;
+  margin: 0;
+  padding: 6px 18px;
+  background: #fff;
+  border: 1px solid var(--nude);
+  border-radius: 22px;
+}
+
+.historial li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-top: 1px solid #f0e6d9;
+}
+
+.historial li:first-child {
+  border-top: none;
+}
+
+.historial-icono {
+  width: 26px;
+  height: 26px;
+  color: var(--dorado);
+}
+
+.historial-texto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.historial-texto strong {
+  font-weight: 500;
+}
+
+.historial-texto span {
+  font-size: 0.84rem;
+  color: var(--tinta-suave);
+}
+
+.historial-texto span::first-letter {
+  text-transform: uppercase;
+}
+
+@media (max-width: 620px) {
+  .historial li {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+  .historial .estado,
+  .historial-repetir {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+/* ---------- Cambiar hora ---------- */
+
+.interruptores-quien {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0 18px;
+}
+
+.hora-elegida,
+.hora-boton[aria-pressed="true"] {
+  background: var(--cacao);
+  border-color: var(--cacao);
+  color: var(--marfil);
+}
+
+/* ---------- Mis pedidos ---------- */
+
+.pedidos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pedido {
+  padding: 18px 20px;
+  background: #fff;
+  border: 1px solid var(--nude);
+  border-radius: 24px;
+}
+
+.pedido-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pedido-codigo {
+  margin: 0;
+  font-weight: 500;
+}
+
+.pedido-fecha {
+  margin: 2px 0 0;
+  font-size: 0.84rem;
+  color: var(--tinta-suave);
+}
+
+.pedido-items {
+  list-style: none;
+  margin: 14px 0;
+  padding: 0;
+}
+
+.pedido-items li {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 0.92rem;
+}
+
+.pedido-foto {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--marfil-hondo);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--dorado-claro);
+}
+
+.pedido-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+
+.pedido-foto svg {
+  width: 60%;
+}
+
+.pedido-cantidad {
+  color: var(--tinta-suave);
+}
+
+.pedido-subtotal {
+  font-variant-numeric: tabular-nums;
+}
+
+.pedido-pie {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px dashed #efe3d3;
+}
+
+.pedido-total strong {
+  font-family: var(--fuente-display);
+  font-size: 1.3rem;
+  margin-left: 6px;
+  font-variant-numeric: lining-nums;
+}
+
+.pedido-acciones {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ---------- Tarjeta "tu proxima cita" en el panel ---------- */
+
+.proxima-cuando {
+  margin: 4px 0 2px;
+  font-family: var(--fuente-script);
+  font-size: 2rem;
+  line-height: 1.2;
+  color: var(--dorado-oscuro);
+}
+
+.proxima-cuando::first-letter {
+  text-transform: uppercase;
+}

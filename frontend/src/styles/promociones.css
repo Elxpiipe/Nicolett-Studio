@@ -1,0 +1,81 @@
+/* Panel de promociones */
+.promos-admin {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 18px;
+}
+
+.promos-admin li {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid var(--nude);
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+.promo-oculta {
+  opacity: 0.55;
+}
+
+.promo-admin-imagen {
+  aspect-ratio: 2 / 3;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: var(--marfil-hondo);
+  display: grid;
+  place-items: center;
+  color: var(--dorado-claro);
+}
+
+.promo-admin-imagen img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.promo-admin-imagen svg {
+  width: 40px;
+}
+
+.promo-admin-texto {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px 14px;
+}
+
+.promo-admin-texto small {
+  color: var(--tinta-suave);
+  font-size: 0.8rem;
+}
+
+.promo-admin-acciones {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.zona-foto-promo {
+  aspect-ratio: 2 / 3;
+  max-width: 260px;
+  margin: 0 auto;
+}
+
+.zona-foto-promo img {
+  object-fit: contain;
+  background: #fff;
+}
+
+.campo-extra {
+  margin-top: 8px;
+}
+
+.cita-cancelar {
+  color: var(--error);
+}

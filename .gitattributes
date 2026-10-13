@@ -1,0 +1,7 @@
+# Normaliza los saltos de linea (Windows escribe CRLF, macOS/Linux LF).
+# Asi git no marca como "modificado" un archivo que solo cambio de salto de linea.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.webp binary
+*.db binary

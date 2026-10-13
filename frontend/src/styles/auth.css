@@ -1,0 +1,252 @@
+.auth-marco {
+  width: 100%;
+  max-width: 1000px;
+  min-height: 620px;
+  background: #fff;
+  border-radius: 28px;
+  border: 1px solid var(--nude);
+  box-shadow: var(--sombra-suave);
+  display: grid;
+  grid-template-columns: 0.9fr 1fr;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Panel de marca: foto del salón con un velo marfil y el loto del logo */
+.auth-panel-marca {
+  position: relative;
+  padding: 48px 40px 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  text-align: center;
+  color: var(--cacao);
+  background:
+    linear-gradient(180deg, rgba(252, 249, 244, 0.97) 0%, rgba(252, 249, 244, 0.9) 42%, rgba(252, 249, 244, 0.25) 72%, rgba(75, 58, 43, 0.55) 100%),
+    url("../assets/salon-nicolett.jpg") 28% center / cover no-repeat;
+  isolation: isolate;
+}
+
+/* marco interior en arco, dorado */
+.auth-panel-marca::before {
+  content: "";
+  position: absolute;
+  inset: 16px;
+  border: 1px solid rgba(179, 138, 78, 0.55);
+  border-radius: 999px 999px 18px 18px / 260px 260px 18px 18px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.auth-marca-nombre {
+  font-family: var(--fuente-display);
+  font-weight: 600;
+  font-size: 2.3rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  color: var(--tinta);
+}
+
+.auth-marca-nombre::before {
+  content: "";
+  display: block;
+  width: 70px;
+  height: 58px;
+  margin: 18px auto 12px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 40'%3E%3Cg fill='none' stroke='%23B38A4E' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M24 4c5.5 6.5 5.5 17 0 27-5.5-10-5.5-20.5 0-27z'/%3E%3Cpath d='M24 31c-2.5-8-8.5-13.5-16-15 .5 8.5 7 14.5 16 15z'/%3E%3Cpath d='M24 31c2.5-8 8.5-13.5 16-15-.5 8.5-7 14.5-16 15z'/%3E%3Cpath d='M24 31c-6-3.5-13-4-19.5-1.5 5.5 4 13 5 19.5 1.5z'/%3E%3Cpath d='M24 31c6-3.5 13-4 19.5-1.5-5.5 4-13 5-19.5 1.5z'/%3E%3Cpath d='M19.5 14.5v12M28.5 14.5v12M19.5 14.5l9 12' stroke-width='1'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.auth-marca-sub {
+  font-family: var(--fuente-script);
+  font-size: 1.75rem;
+  color: var(--dorado-oscuro);
+  margin-top: 10px;
+}
+
+.auth-marca-pie {
+  max-width: 34ch;
+  font-size: 0.9rem;
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--marfil);
+  text-shadow: 0 1px 8px rgba(47, 36, 26, 0.6);
+}
+
+.auth-panel-form {
+  padding: 56px 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.auth-titulo {
+  font-family: var(--fuente-script);
+  font-weight: 400;
+  font-size: 2.9rem;
+  line-height: 1.1;
+  color: var(--dorado-oscuro);
+  margin-bottom: 6px;
+}
+
+.auth-subtitulo {
+  font-family: var(--fuente-cuerpo);
+  color: var(--color-tinta-suave);
+  font-size: 0.95rem;
+  margin-bottom: 32px;
+}
+
+.auth-campo {
+  margin-bottom: 18px;
+}
+
+.auth-campo label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--color-tinta-suave);
+}
+
+.auth-fila-dos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.auth-campo input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--color-nude);
+  border-radius: 12px;
+  background: #fff;
+  font-size: 0.95rem;
+  color: var(--color-tinta);
+  transition: border-color 0.15s ease;
+}
+
+.auth-campo input:focus {
+  outline: none;
+  border-color: var(--color-dorado);
+  box-shadow: 0 0 0 3px rgba(226, 200, 147, 0.35);
+}
+
+.auth-campo input.con-error {
+  border-color: var(--color-error);
+}
+
+.auth-error-campo {
+  font-size: 0.78rem;
+  color: var(--color-error);
+  margin-top: 5px;
+}
+
+.auth-alerta {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  border-radius: var(--radio-borde);
+  padding: 12px 14px;
+  font-size: 0.86rem;
+  margin-bottom: 18px;
+}
+
+.auth-boton {
+  width: 100%;
+  padding: 13px 16px;
+  background: var(--cacao);
+  color: var(--marfil);
+  border: none;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  margin-top: 6px;
+}
+
+.auth-boton:hover:not(:disabled) {
+  background: var(--tinta);
+}
+
+.auth-boton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-pie-form {
+  text-align: center;
+  margin-top: 22px;
+  font-size: 0.88rem;
+  color: var(--color-tinta-suave);
+}
+
+.auth-pie-form a {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.auth-pie-form a:hover {
+  text-decoration: underline;
+}
+
+.auth-olvide-link {
+  text-align: right;
+  margin-top: 6px;
+}
+
+.auth-olvide-link a {
+  font-size: 0.8rem;
+  color: var(--color-tinta-suave);
+  text-decoration: none;
+}
+
+.auth-olvide-link a:hover {
+  color: var(--color-dorado-oscuro);
+  text-decoration: underline;
+}
+
+.auth-alerta-exito {
+  background: #e7f0e9;
+  color: var(--color-exito);
+}
+
+.auth-nota-dev {
+  font-size: 0.8rem;
+  color: var(--color-tinta-suave);
+  background: var(--color-crema-suave);
+  border-radius: var(--radio-borde);
+  padding: 10px 12px;
+  margin-top: 14px;
+}
+
+@media (max-width: 800px) {
+  .auth-marco {
+    grid-template-columns: 1fr;
+  }
+  .auth-panel-marca {
+    padding: 30px 28px 26px;
+    min-height: 300px;
+  }
+  .auth-marca-nombre {
+    font-size: 1.8rem;
+  }
+  .auth-panel-form {
+    padding: 36px 28px;
+  }
+  .auth-fila-dos {
+    grid-template-columns: 1fr;
+  }
+}
+
+.auth-volver {
+  display: inline-block;
+  margin-bottom: 18px;
+  font-size: 0.85rem;
+  color: var(--tinta-suave);
+  text-decoration: none;
+}
+
+.auth-volver:hover {
+  color: var(--dorado-oscuro);
+}

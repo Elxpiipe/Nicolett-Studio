@@ -1,0 +1,120 @@
+/*
+  Tokens de marca — Nicolett Studio Fantasy
+  Tomados de su logo y de sus publicaciones de Instagram:
+  blanco marfil, nude y dorado, con un café cacao para textos y franjas.
+
+  Tipografía:
+  - Cormorant Garamond: títulos en mayúsculas espaciadas (como "NICOLETT").
+  - Pinyon Script: acentos caligráficos ("Manicura", "Pestañas & Cejas").
+  - Jost: textos de interfaz, formularios y botones.
+*/
+
+:root {
+  /* Paleta base */
+  --marfil: #fcf9f4;
+  --marfil-hondo: #f5eee4;
+  --nude: #ebdccb;
+  --nude-hondo: #d8bfa5;
+  --dorado: #b38a4e;
+  --dorado-claro: #e2c893;
+  --dorado-oscuro: #8c6a36;
+  --cacao: #4b3a2b;
+  --tinta: #1f1a15;
+  --tinta-suave: #6b5b4b;
+
+  /* Degradado dorado de las "píldoras" de precio de sus publicaciones */
+  --oro: linear-gradient(135deg, #f3e3bd 0%, #d9b877 34%, #b88c4a 68%, #dcc088 100%);
+
+  --error: #9c3d4f;
+  --error-fondo: #f8ebed;
+  --exito: #4d7358;
+  --exito-fondo: #eaf1ea;
+
+  --fuente-display: "Cormorant Garamond", "Times New Roman", serif;
+  --fuente-script: "Pinyon Script", "Brush Script MT", cursive;
+  --fuente-cuerpo: "Jost", "Helvetica Neue", Arial, sans-serif;
+
+  --radio: 14px;
+  --sombra-suave: 0 30px 60px -38px rgba(75, 58, 43, 0.45);
+
+  /* Nombres anteriores (los usan auth.css y panel.css) apuntando a la nueva paleta */
+  --color-crema: var(--marfil);
+  --color-crema-suave: var(--marfil-hondo);
+  --color-nude: var(--nude);
+  --color-dorado: var(--dorado);
+  --color-dorado-oscuro: var(--dorado-oscuro);
+  --color-tinta: var(--tinta);
+  --color-tinta-suave: var(--tinta-suave);
+  --color-error: var(--error);
+  --color-error-bg: var(--error-fondo);
+  --color-exito: var(--exito);
+  --radio-borde: 10px;
+  --sombra-card: var(--sombra-suave);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--fuente-cuerpo);
+  font-weight: 400;
+  color: var(--tinta);
+  background-color: var(--marfil);
+  background-image:
+    radial-gradient(ellipse 70% 50% at 100% 0%, rgba(226, 200, 147, 0.22), transparent 70%),
+    radial-gradient(ellipse 60% 45% at 0% 100%, rgba(235, 220, 203, 0.55), transparent 70%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--fuente-display);
+  font-weight: 500;
+  margin: 0;
+  color: var(--tinta);
+}
+
+a {
+  color: var(--dorado-oscuro);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--dorado-oscuro);
+  outline-offset: 2px;
+}
+
+.contenedor-centrado {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

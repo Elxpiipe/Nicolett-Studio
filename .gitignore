@@ -1,0 +1,21 @@
+# Dependencias y compilados
+node_modules/
+dist/
+
+# Secretos: NUNCA subir a git
+.env
+backend/credenciales/*.json
+
+# Base de datos local y archivos subidos
+backend/db/*.db
+backend/db/*.db-journal
+backend/db/*.db-wal
+backend/db/*.db-shm
+backend/uploads/**/*
+!backend/uploads/**/
+!backend/uploads/**/.gitkeep
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.log
