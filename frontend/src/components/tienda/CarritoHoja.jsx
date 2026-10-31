@@ -2,7 +2,7 @@
 // Carrito lateral: cantidades, total y pago con Webpay. Siempre valida precios y
 // stock con el backend (el carrito del navegador solo guarda ids y cantidades).
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useCarrito } from "../../context/CarritoContext";
 import { api, urlImagen } from "../../api/client";
@@ -10,6 +10,8 @@ import { formatearPrecio } from "../../utils/formato";
 import { irAWebpay } from "../../utils/webpay";
 import { CONTACTO } from "../../utils/contacto";
 import Hoja from "../marca/Hoja";
+import DatosInvitada from "../DatosInvitada";
+import { datosInvitadaIniciales, iniciarSesionInvitada, validarDatosInvitada } from "../../utils/invitada";
 import { Loto } from "../marca/Iconos";
 
 export default function CarritoHoja() {
@@ -21,6 +23,9 @@ export default function CarritoHoja() {
   const [notas, setNotas] = useState("");
   const [pagando, setPagando] = useState(false);
   const [error, setError] = useState("");
+  const [cuentaExistente, setCuentaExistente] = useState(false);
+  const [invitada, setInvitada] = useState(datosInvitadaIniciales);
+  const desde = { pathname: "/tienda", search: "?carrito=1" };
 
   useEffect(() => {
     api
@@ -38,24 +43,29 @@ export default function CarritoHoja() {
 
   async function pagar() {
     setError("");
+    setCuentaExistente(false);
+    // Sin cuenta: compra como invitada (nombre, correo y telefono para avisarle)
     if (!usuario) {
-      cerrar();
-      navigate("/login", { state: { desde: { pathname: "/tienda", search: "?carrito=1" } } });
-      return;
-    }
-    if (usuario.rol !== "Cliente") {
+      const problema = validarDatosInvitada(invitada);
+      if (problema) {
+        setError(problema);
+        return;
+      }
+    } else if (usuario.rol !== "Cliente") {
       setError("Las compras se hacen con una cuenta de clienta. Inicia sesión con una.");
       return;
     }
     setPagando(true);
     try {
+      const tokenCompra = usuario ? token : await iniciarSesionInvitada(invitada);
       const { pedido } = await api.crearPedido(
         { items: items.map(({ id_producto, cantidad }) => ({ id_producto, cantidad })), notas },
-        token
+        tokenCompra
       );
-      irAWebpay(await api.iniciarWebpayCompra(pedido.codigo_venta, token));
+      irAWebpay(await api.iniciarWebpayCompra(pedido.codigo_venta, tokenCompra));
     } catch (err) {
       setError(err.message);
+      setCuentaExistente(err.codigo === "CUENTA_EXISTENTE");
       setPagando(false);
       api.listarProductos().then((res) => setProductos(res.datos)); // refresca stock
     }
@@ -147,9 +157,18 @@ export default function CarritoHoja() {
               />
             </div>
 
+            {!usuario && <DatosInvitada datos={invitada} onCambio={setInvitada} desde={desde} accion="comprar" />}
+
             {error && (
               <div className="aviso aviso-error" role="alert">
-                <span>{error}</span>
+                <span>
+                  {error}{" "}
+                  {cuentaExistente && (
+                    <Link to="/login" state={{ desde }} onClick={cerrar}>
+                      Iniciar sesión
+                    </Link>
+                  )}
+                </span>
               </div>
             )}
 
@@ -164,7 +183,7 @@ export default function CarritoHoja() {
               onClick={pagar}
               disabled={pagando || problemas.length > 0 || total === 0}
             >
-              {pagando ? "Conectando con Webpay…" : usuario ? "Pagar con Webpay" : "Inicia sesión para pagar"}
+              {pagando ? "Conectando con Webpay…" : "Pagar con Webpay"}
             </button>
             <p className="bloque-ayuda carrito-nota">
               Pagas con débito o crédito en Webpay (Transbank). Tus productos quedan apartados 15 minutos

@@ -7,22 +7,22 @@ const CAMPOS = `
   p.foto_url, p.cargo, p.es_destacada, p.visible_sitio, p.orden,
   p.alias_calendario, p.google_calendar_id,
   u.nombres, u.apellidos, u.email, u.telefono, u.activo AS usuario_activo,
-  (u.id_rol = 1) AS es_administradora
+  (u.id_rol = 1)::int AS es_administradora
 `;
 
-function listar({ soloActivos = false } = {}) {
+async function listar({ soloActivos = false } = {}) {
   const condicion = soloActivos ? "WHERE p.activo = 1 AND u.activo = 1" : "";
   return db
     .prepare(
       `SELECT ${CAMPOS} FROM profesionales p
        JOIN usuarios u ON u.id_usuario = p.id_usuario
        ${condicion}
-       ORDER BY p.es_destacada DESC, p.orden, u.nombres, u.apellidos`
+       ORDER BY p.es_destacada DESC, p.orden, u.nombres, u.apellidos, p.id_profesional`
     )
     .all();
 }
 
-function obtener(id_profesional) {
+async function obtener(id_profesional) {
   return db
     .prepare(
       `SELECT ${CAMPOS} FROM profesionales p
@@ -32,7 +32,7 @@ function obtener(id_profesional) {
     .get(id_profesional);
 }
 
-function obtenerPorUsuario(id_usuario) {
+async function obtenerPorUsuario(id_usuario) {
   return db
     .prepare(
       `SELECT ${CAMPOS} FROM profesionales p
@@ -53,7 +53,7 @@ const CAMPOS_PERFIL = [
 ];
 
 /** Actualiza solo los campos enviados del perfil profesional (y nombres en usuarios) */
-const actualizarPerfil = db.transaction((id_profesional, cambios) => {
+const actualizarPerfil = db.transaction(async (id_profesional, cambios) => {
   const campos = CAMPOS_PERFIL.filter((c) => cambios[c] !== undefined);
   if (campos.length) {
     const asignaciones = campos.map((c) => `${c} = @${c}`).join(", ");
@@ -62,15 +62,15 @@ const actualizarPerfil = db.transaction((id_profesional, cambios) => {
       const v = cambios[c];
       valores[c] = typeof v === "boolean" ? Number(v) : v === "" ? null : v;
     }
-    db.prepare(`UPDATE profesionales SET ${asignaciones} WHERE id_profesional = @id_profesional`).run(valores);
+    await db.prepare(`UPDATE profesionales SET ${asignaciones} WHERE id_profesional = @id_profesional`).run(valores);
   }
   // Solo una profesional puede ser la destacada (duena / principal)
   if (cambios.es_destacada) {
-    db.prepare(`UPDATE profesionales SET es_destacada = 0 WHERE id_profesional <> ?`).run(id_profesional);
+    await db.prepare(`UPDATE profesionales SET es_destacada = 0 WHERE id_profesional <> ?`).run(id_profesional);
   }
   if (cambios.nombres || cambios.apellidos) {
-    const actual = obtener(id_profesional);
-    db.prepare(`UPDATE usuarios SET nombres = ?, apellidos = ? WHERE id_usuario = ?`).run(
+    const actual = await obtener(id_profesional);
+    await db.prepare(`UPDATE usuarios SET nombres = ?, apellidos = ? WHERE id_usuario = ?`).run(
       cambios.nombres || actual.nombres,
       cambios.apellidos || actual.apellidos,
       actual.id_usuario
@@ -79,10 +79,10 @@ const actualizarPerfil = db.transaction((id_profesional, cambios) => {
 });
 
 /** Crea el perfil de profesional para una cuenta existente (ej. la duena, que es Administradora) */
-function crearParaUsuario(id_usuario, { cargo, descripcion } = {}) {
-  const existente = obtenerPorUsuario(id_usuario);
+async function crearParaUsuario(id_usuario, { cargo, descripcion } = {}) {
+  const existente = await obtenerPorUsuario(id_usuario);
   if (existente) return existente;
-  db.prepare(`INSERT INTO profesionales (id_usuario, descripcion, cargo) VALUES (?, ?, ?)`).run(
+  await db.prepare(`INSERT INTO profesionales (id_usuario, descripcion, cargo) VALUES (?, ?, ?)`).run(
     id_usuario,
     descripcion || null,
     cargo || null
@@ -91,45 +91,45 @@ function crearParaUsuario(id_usuario, { cargo, descripcion } = {}) {
 }
 
 /** Da o quita acceso de Administradora a la cuenta de una profesional */
-function cambiarRolUsuario(id_usuario, esAdministradora) {
-  db.prepare(`UPDATE usuarios SET id_rol = ? WHERE id_usuario = ?`).run(esAdministradora ? 1 : 2, id_usuario);
+async function cambiarRolUsuario(id_usuario, esAdministradora) {
+  await db.prepare(`UPDATE usuarios SET id_rol = ? WHERE id_usuario = ?`).run(esAdministradora ? 1 : 2, id_usuario);
 }
 
-function contarAdministradorasActivas() {
-  return db.prepare(`SELECT COUNT(*) AS n FROM usuarios WHERE id_rol = 1 AND activo = 1`).get().n;
+async function contarAdministradorasActivas() {
+  return (await db.prepare(`SELECT COUNT(*) AS n FROM usuarios WHERE id_rol = 1 AND activo = 1`).get()).n;
 }
 
-function cambiarEstado(id_profesional, activo) {
-  db.prepare(`UPDATE profesionales SET activo = ? WHERE id_profesional = ?`).run(activo ? 1 : 0, id_profesional);
+async function cambiarEstado(id_profesional, activo) {
+  await db.prepare(`UPDATE profesionales SET activo = ? WHERE id_profesional = ?`).run(activo ? 1 : 0, id_profesional);
   return obtener(id_profesional);
 }
 
-function actualizarFoto(id_profesional, foto_url) {
-  db.prepare(`UPDATE profesionales SET foto_url = ? WHERE id_profesional = ?`).run(foto_url, id_profesional);
+async function actualizarFoto(id_profesional, foto_url) {
+  await db.prepare(`UPDATE profesionales SET foto_url = ? WHERE id_profesional = ?`).run(foto_url, id_profesional);
   return obtener(id_profesional);
 }
 
 /** Equipo visible en el sitio publico ("Nosotras") */
-function listarPublico() {
-  return db
+async function listarPublico() {
+  const filas = await db
     .prepare(
       `SELECT p.id_profesional, p.descripcion, p.foto_url, p.cargo, p.es_destacada,
               u.nombres, u.apellidos,
-              (SELECT GROUP_CONCAT(DISTINCT c.nombre)
+              (SELECT STRING_AGG(DISTINCT c.nombre, ',')
                  FROM profesional_servicio ps
                  JOIN servicios s ON s.id_servicio = ps.id_servicio AND s.activo = 1
                  JOIN categorias_servicio c ON c.id_categoria = s.id_categoria
                 WHERE ps.id_profesional = p.id_profesional AND ps.activo = 1) AS categorias
        FROM profesionales p JOIN usuarios u ON u.id_usuario = p.id_usuario
        WHERE p.activo = 1 AND u.activo = 1 AND p.visible_sitio = 1
-       ORDER BY p.es_destacada DESC, p.orden, u.nombres`
+       ORDER BY p.es_destacada DESC, p.orden, u.nombres, p.id_profesional`
     )
-    .all()
-    .map((p) => ({ ...p, categorias: p.categorias ? p.categorias.split(",").sort() : [] }));
+    .all();
+  return filas.map((p) => ({ ...p, categorias: p.categorias ? p.categorias.split(",").sort() : [] }));
 }
 
 /** Tramos de atencion de todas las profesionales activas (para "horario del salon") */
-function tramosActivos() {
+async function tramosActivos() {
   return db
     .prepare(
       `SELECT d.dia_semana, d.hora_inicio, d.hora_fin
@@ -137,13 +137,13 @@ function tramosActivos() {
        JOIN profesionales p ON p.id_profesional = d.id_profesional
        JOIN usuarios u ON u.id_usuario = p.id_usuario
        WHERE d.activo = 1 AND p.activo = 1 AND u.activo = 1
-       ORDER BY d.dia_semana, d.hora_inicio`
+       ORDER BY d.dia_semana, d.hora_inicio, d.id_disponibilidad`
     )
     .all();
 }
 
 /** Profesionales activas que realizan un servicio (para que la clienta elija) */
-function listarPorServicio(id_servicio) {
+async function listarPorServicio(id_servicio) {
   return db
     .prepare(
       `SELECT p.id_profesional, p.descripcion, u.nombres, u.apellidos
@@ -151,14 +151,14 @@ function listarPorServicio(id_servicio) {
        JOIN profesionales p ON p.id_profesional = ps.id_profesional
        JOIN usuarios u ON u.id_usuario = p.id_usuario
        WHERE ps.id_servicio = ? AND ps.activo = 1 AND p.activo = 1 AND u.activo = 1
-       ORDER BY u.nombres`
+       ORDER BY u.nombres, p.id_profesional`
     )
     .all(id_servicio);
 }
 
 // ---------- Servicios que realiza ----------
 
-function listarServicios(id_profesional) {
+async function listarServicios(id_profesional) {
   return db
     .prepare(
       `SELECT s.id_servicio, s.nombre, s.id_categoria, c.nombre AS categoria
@@ -166,94 +166,96 @@ function listarServicios(id_profesional) {
        JOIN servicios s ON s.id_servicio = ps.id_servicio
        JOIN categorias_servicio c ON c.id_categoria = s.id_categoria
        WHERE ps.id_profesional = ? AND ps.activo = 1
-       ORDER BY c.nombre, s.nombre`
+       ORDER BY c.nombre, s.nombre, s.id_servicio`
     )
     .all(id_profesional);
 }
 
 /** Reemplaza el conjunto completo de servicios de la profesional */
-const reemplazarServicios = db.transaction((id_profesional, idsServicios) => {
-  db.prepare(`DELETE FROM profesional_servicio WHERE id_profesional = ?`).run(id_profesional);
+const reemplazarServicios = db.transaction(async (id_profesional, idsServicios) => {
+  await db.prepare(`DELETE FROM profesional_servicio WHERE id_profesional = ?`).run(id_profesional);
   const insertar = db.prepare(
     `INSERT INTO profesional_servicio (id_profesional, id_servicio, activo) VALUES (?, ?, 1)`
   );
-  for (const id of idsServicios) insertar.run(id_profesional, id);
+  for (const id of idsServicios) await insertar.run(id_profesional, id);
 });
 
 // ---------- Horario semanal ----------
 
-function listarHorario(id_profesional) {
+async function listarHorario(id_profesional) {
   return db
     .prepare(
       `SELECT id_disponibilidad, dia_semana, hora_inicio, hora_fin, fecha_desde, fecha_hasta
        FROM disponibilidad_profesional
        WHERE id_profesional = ? AND activo = 1
-       ORDER BY dia_semana, hora_inicio`
+       ORDER BY dia_semana, hora_inicio, id_disponibilidad`
     )
     .all(id_profesional);
 }
 
 /** Tramos que aplican a una fecha concreta */
-function horarioDeFecha(id_profesional, dia_semana, fecha) {
+async function horarioDeFecha(id_profesional, dia_semana, fecha) {
   return db
     .prepare(
       `SELECT hora_inicio, hora_fin FROM disponibilidad_profesional
        WHERE id_profesional = ? AND dia_semana = ? AND activo = 1
          AND (fecha_desde IS NULL OR fecha_desde <= ?)
          AND (fecha_hasta IS NULL OR fecha_hasta >= ?)
-       ORDER BY hora_inicio`
+       ORDER BY hora_inicio, id_disponibilidad`
     )
     .all(id_profesional, dia_semana, fecha, fecha);
 }
 
 /** Reemplaza el horario semanal completo (tramos: [{dia_semana, hora_inicio, hora_fin}]) */
-const reemplazarHorario = db.transaction((id_profesional, tramos) => {
-  db.prepare(`DELETE FROM disponibilidad_profesional WHERE id_profesional = ?`).run(id_profesional);
+const reemplazarHorario = db.transaction(async (id_profesional, tramos) => {
+  await db.prepare(`DELETE FROM disponibilidad_profesional WHERE id_profesional = ?`).run(id_profesional);
   const insertar = db.prepare(
     `INSERT INTO disponibilidad_profesional (id_profesional, dia_semana, hora_inicio, hora_fin)
      VALUES (?, ?, ?, ?)`
   );
-  for (const t of tramos) insertar.run(id_profesional, t.dia_semana, t.hora_inicio, t.hora_fin);
+  for (const t of tramos) await insertar.run(id_profesional, t.dia_semana, t.hora_inicio, t.hora_fin);
 });
 
 // ---------- Bloqueos (vacaciones, tramites, colacion puntual) ----------
 
-function listarBloqueos(id_profesional, desde) {
+async function listarBloqueos(id_profesional, desde) {
   return db
     .prepare(
       `SELECT id_bloqueo, fecha_hora_inicio, fecha_hora_fin, motivo
        FROM bloqueos_agenda
        WHERE id_profesional = ? AND fecha_hora_fin > ?
-       ORDER BY fecha_hora_inicio`
+       ORDER BY fecha_hora_inicio, id_bloqueo`
     )
     .all(id_profesional, desde);
 }
 
-function bloqueosQueTocan(id_profesional, inicio, fin) {
+async function bloqueosQueTocan(id_profesional, inicio, fin) {
   return db
     .prepare(
       `SELECT fecha_hora_inicio, fecha_hora_fin FROM bloqueos_agenda
-       WHERE id_profesional = ? AND fecha_hora_inicio < ? AND fecha_hora_fin > ?`
+       WHERE id_profesional = ? AND fecha_hora_inicio < ? AND fecha_hora_fin > ?
+       ORDER BY id_bloqueo`
     )
     .all(id_profesional, fin, inicio);
 }
 
-function obtenerBloqueo(id_bloqueo) {
+async function obtenerBloqueo(id_bloqueo) {
   return db.prepare(`SELECT * FROM bloqueos_agenda WHERE id_bloqueo = ?`).get(id_bloqueo);
 }
 
-function crearBloqueo({ id_profesional, fecha_hora_inicio, fecha_hora_fin, motivo }) {
-  const info = db
+async function crearBloqueo({ id_profesional, fecha_hora_inicio, fecha_hora_fin, motivo }) {
+  const info = await db
     .prepare(
       `INSERT INTO bloqueos_agenda (id_profesional, fecha_hora_inicio, fecha_hora_fin, motivo)
-       VALUES (?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?)
+       RETURNING id_bloqueo`
     )
     .run(id_profesional, fecha_hora_inicio, fecha_hora_fin, motivo || null);
   return obtenerBloqueo(info.lastInsertRowid);
 }
 
-function eliminarBloqueo(id_bloqueo) {
-  db.prepare(`DELETE FROM bloqueos_agenda WHERE id_bloqueo = ?`).run(id_bloqueo);
+async function eliminarBloqueo(id_bloqueo) {
+  await db.prepare(`DELETE FROM bloqueos_agenda WHERE id_bloqueo = ?`).run(id_bloqueo);
 }
 
 // ---------- Citas que ocupan agenda ----------
@@ -263,7 +265,7 @@ function eliminarBloqueo(id_bloqueo) {
 //  - esta PENDIENTE_ABONO y su plazo para pagar aun no vence
 //    (15 min en Webpay, 2 horas por transferencia). Vencido el plazo,
 //    la hora vuelve a ofrecerse aunque la cita aun no se haya cancelado.
-function citasQueTocan(id_profesional, inicio, fin) {
+async function citasQueTocan(id_profesional, inicio, fin) {
   return db
     .prepare(
       `SELECT id_cita, fecha_hora_inicio, fecha_hora_fin, estado FROM citas
@@ -273,7 +275,8 @@ function citasQueTocan(id_profesional, inicio, fin) {
            OR (estado = 'PENDIENTE_ABONO'
                AND (fecha_expiracion_abono IS NULL OR fecha_expiracion_abono > ?))
          )
-         AND fecha_hora_inicio < ? AND fecha_hora_fin > ?`
+         AND fecha_hora_inicio < ? AND fecha_hora_fin > ?
+       ORDER BY id_cita`
     )
     .all(id_profesional, ahoraChile().texto, fin, inicio);
 }

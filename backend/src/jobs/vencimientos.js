@@ -11,16 +11,17 @@ const ventaModel = require("../models/venta.model");
 
 const MOTIVO_VENCIDA = "Plazo de abono vencido";
 
-const vencerPendientes = db.transaction((ahora) => {
-  const vencidas = db
+const vencerPendientes = db.transaction(async (ahora) => {
+  const vencidas = await db
     .prepare(
       `SELECT id_cita, codigo_cita FROM citas
        WHERE estado = 'PENDIENTE_ABONO'
-         AND fecha_expiracion_abono IS NOT NULL AND fecha_expiracion_abono <= ?`
+         AND fecha_expiracion_abono IS NOT NULL AND fecha_expiracion_abono <= ?
+       ORDER BY id_cita`
     )
     .all(ahora);
   const cancelarCita = db.prepare(
-    `UPDATE citas SET estado = 'CANCELADA', fecha_cancelacion = CURRENT_TIMESTAMP,
+    `UPDATE citas SET estado = 'CANCELADA', fecha_cancelacion = fecha_actual_utc(),
        motivo_cancelacion = ? WHERE id_cita = ?`
   );
   const anularPago = db.prepare(
@@ -28,17 +29,17 @@ const vencerPendientes = db.transaction((ahora) => {
      WHERE id_cita = ? AND tipo_pago = 'ABONO_CITA' AND estado IN ('PENDIENTE','RECHAZADO')`
   );
   for (const c of vencidas) {
-    cancelarCita.run(MOTIVO_VENCIDA, c.id_cita);
-    anularPago.run(c.id_cita);
+    await cancelarCita.run(MOTIVO_VENCIDA, c.id_cita);
+    await anularPago.run(c.id_cita);
   }
   return vencidas.map((c) => c.codigo_cita);
 });
 
-function revisar() {
+async function revisar() {
   try {
-    const codigos = vencerPendientes(ahoraChile().texto);
+    const codigos = await vencerPendientes(ahoraChile().texto);
     if (codigos.length) console.log(`Reservas vencidas por falta de abono: ${codigos.join(", ")}`);
-    const pedidos = ventaModel.vencerPendientes(ahoraChile().texto); // devuelve el stock apartado
+    const pedidos = await ventaModel.vencerPendientes(ahoraChile().texto); // devuelve el stock apartado
     if (pedidos.length) console.log(`Pedidos vencidos sin pago (stock devuelto): ${pedidos.join(", ")}`);
   } catch (err) {
     console.error("Error al revisar reservas vencidas:", err.message);

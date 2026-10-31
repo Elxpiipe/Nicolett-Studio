@@ -4,25 +4,26 @@ const db = require("../../db/connection");
 
 const CAMPOS = `
   id_producto, codigo, nombre, descripcion, marca, linea, imagen_url,
-  precio_venta AS precio, CAST(stock_actual AS INTEGER) AS stock, activo
+  precio_venta AS precio, CAST(trunc(stock_actual) AS INTEGER) AS stock, activo
 `;
 
-function listar({ soloActivos = false } = {}) {
+async function listar({ soloActivos = false } = {}) {
   const condicion = soloActivos ? "WHERE activo = 1 AND precio_venta IS NOT NULL" : "";
   return db
-    .prepare(`SELECT ${CAMPOS} FROM productos ${condicion} ORDER BY activo DESC, linea, nombre`)
+    .prepare(`SELECT ${CAMPOS} FROM productos ${condicion} ORDER BY activo DESC, linea NULLS FIRST, nombre, id_producto`)
     .all();
 }
 
-function obtener(id_producto) {
+async function obtener(id_producto) {
   return db.prepare(`SELECT ${CAMPOS} FROM productos WHERE id_producto = ?`).get(id_producto);
 }
 
-function crear({ nombre, descripcion, marca, linea, precio, stock, codigo }) {
-  const info = db
+async function crear({ nombre, descripcion, marca, linea, precio, stock, codigo }) {
+  const info = await db
     .prepare(
       `INSERT INTO productos (codigo, nombre, descripcion, marca, linea, precio_venta, stock_actual)
-       VALUES (?, ?, ?, ?, ?, ?, 0)`
+       VALUES (?, ?, ?, ?, ?, ?, 0)
+       RETURNING id_producto`
     )
     .run(codigo || null, nombre, descripcion || null, marca || null, linea || null, precio);
   return info.lastInsertRowid;
@@ -30,25 +31,25 @@ function crear({ nombre, descripcion, marca, linea, precio, stock, codigo }) {
 
 const EDITABLES = { nombre: "nombre", descripcion: "descripcion", marca: "marca", linea: "linea", precio: "precio_venta", codigo: "codigo" };
 
-function actualizar(id_producto, cambios) {
+async function actualizar(id_producto, cambios) {
   const campos = Object.keys(EDITABLES).filter((c) => cambios[c] !== undefined);
   if (!campos.length) return;
   const sql = campos.map((c) => `${EDITABLES[c]} = @${c}`).join(", ");
   const valores = { id_producto };
   for (const c of campos) valores[c] = cambios[c] === "" ? null : cambios[c];
-  db.prepare(`UPDATE productos SET ${sql} WHERE id_producto = @id_producto`).run(valores);
+  await db.prepare(`UPDATE productos SET ${sql} WHERE id_producto = @id_producto`).run(valores);
 }
 
 /**
  * Deja el stock en `nuevoStock` y registra la diferencia como movimiento de
  * inventario (entrada o ajuste), para tener trazabilidad de quien lo cambio.
  */
-const fijarStock = db.transaction((id_producto, nuevoStock, id_usuario, motivo) => {
-  const actual = obtener(id_producto).stock;
+const fijarStock = db.transaction(async (id_producto, nuevoStock, id_usuario, motivo) => {
+  const actual = (await obtener(id_producto)).stock;
   const diferencia = nuevoStock - actual;
   if (diferencia === 0) return;
-  db.prepare(`UPDATE productos SET stock_actual = ? WHERE id_producto = ?`).run(nuevoStock, id_producto);
-  db.prepare(
+  await db.prepare(`UPDATE productos SET stock_actual = ? WHERE id_producto = ?`).run(nuevoStock, id_producto);
+  await db.prepare(
     `INSERT INTO movimientos_inventario (id_producto, tipo, cantidad, motivo, id_usuario)
      VALUES (?, ?, ?, ?, ?)`
   ).run(
@@ -60,16 +61,16 @@ const fijarStock = db.transaction((id_producto, nuevoStock, id_usuario, motivo) 
   );
 });
 
-function cambiarEstado(id_producto, activo) {
-  db.prepare(`UPDATE productos SET activo = ? WHERE id_producto = ?`).run(activo ? 1 : 0, id_producto);
+async function cambiarEstado(id_producto, activo) {
+  await db.prepare(`UPDATE productos SET activo = ? WHERE id_producto = ?`).run(activo ? 1 : 0, id_producto);
 }
 
-function actualizarImagen(id_producto, imagen_url) {
-  db.prepare(`UPDATE productos SET imagen_url = ? WHERE id_producto = ?`).run(imagen_url, id_producto);
+async function actualizarImagen(id_producto, imagen_url) {
+  await db.prepare(`UPDATE productos SET imagen_url = ? WHERE id_producto = ?`).run(imagen_url, id_producto);
 }
 
-function buscarPorNombre(nombre) {
-  return db.prepare(`SELECT id_producto FROM productos WHERE nombre = ? COLLATE NOCASE`).get(nombre);
+async function buscarPorNombre(nombre) {
+  return db.prepare(`SELECT id_producto FROM productos WHERE lower(nombre) = lower(?)`).get(nombre);
 }
 
 module.exports = { listar, obtener, crear, actualizar, fijarStock, cambiarEstado, actualizarImagen, buscarPorNombre };

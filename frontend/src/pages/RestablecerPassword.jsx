@@ -7,6 +7,8 @@ export default function RestablecerPassword() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get("token") || "";
+  // ?activar=1: cuenta nueva de quien ya habia reservado o comprado sin cuenta
+  const activar = searchParams.get("activar") === "1";
 
   const [form, setForm] = useState({ password_nueva: "", confirmar: "" });
   const [error, setError] = useState("");
@@ -77,19 +79,23 @@ export default function RestablecerPassword() {
         <div className="auth-panel-form">
 
           <Link to="/" className="auth-volver">← Volver al sitio</Link>
-          <h1 className="auth-titulo">Nueva contraseña</h1>
-          <p className="auth-subtitulo">Este enlace es válido por 30 minutos.</p>
+          <h1 className="auth-titulo">{activar ? "Crea tu contraseña" : "Nueva contraseña"}</h1>
+          <p className="auth-subtitulo">
+            {activar
+              ? "Último paso para activar tu cuenta. Tus reservas y compras anteriores quedarán en ella."
+              : "Este enlace es válido por 30 minutos."}
+          </p>
 
           {error && <div className="auth-alerta">{error}</div>}
 
           {exito ? (
             <div className="auth-alerta auth-alerta-exito">
-              Contraseña actualizada. Redirigiendo al inicio de sesión…
+              {activar ? "¡Tu cuenta está activa!" : "Contraseña actualizada."} Redirigiendo al inicio de sesión…
             </div>
           ) : (
             <form onSubmit={manejarEnvio} noValidate>
               <div className="auth-campo">
-                <label htmlFor="password_nueva">Nueva contraseña</label>
+                <label htmlFor="password_nueva">{activar ? "Contraseña" : "Nueva contraseña"}</label>
                 <input
                   id="password_nueva"
                   type="password"
@@ -112,7 +118,7 @@ export default function RestablecerPassword() {
               </div>
 
               <button className="auth-boton" type="submit" disabled={enviando}>
-                {enviando ? "Guardando…" : "Restablecer contraseña"}
+                {enviando ? "Guardando…" : activar ? "Activar mi cuenta" : "Restablecer contraseña"}
               </button>
             </form>
           )}

@@ -10,6 +10,10 @@
 */
 
 :root {
+  /* Ancho de las paginas: ocupan toda la pantalla (hasta 1920px) con un margen lateral
+     que crece con la pantalla. Cambiar aqui afecta a todo el sitio. */
+  --ancho-pagina: 1920px;
+  --margen-lateral: clamp(16px, 3vw, 56px);
   /* Paleta base */
   --marfil: #fcf9f4;
   --marfil-hondo: #f5eee4;

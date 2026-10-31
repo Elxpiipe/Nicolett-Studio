@@ -6,7 +6,7 @@ const usuarioModel = require("../models/usuario.model");
  * Verifica el header Authorization: Bearer <token>.
  * Si es valido, adjunta req.usuario = { id_usuario, id_rol, rol, email }.
  */
-function requiereAutenticacion(req, res, next) {
+async function requiereAutenticacion(req, res, next) {
   const header = req.headers.authorization || "";
   const [tipo, token] = header.split(" ");
 
@@ -18,9 +18,20 @@ function requiereAutenticacion(req, res, next) {
     const payload = verificarToken(token);
 
     // Confirmamos que el usuario siga existiendo y activo (no solo confiar en el token)
-    const usuario = usuarioModel.findById(payload.id_usuario);
+    const usuario = await usuarioModel.findById(payload.id_usuario);
     if (!usuario || !usuario.activo) {
       return res.status(401).json({ error: "Usuario inexistente o inactivo" });
+    }
+
+    // Sesion de invitada (reserva o compra sin cuenta): solo sirve en las rutas que la
+    // permiten y deja de valer si la persona ya creo su cuenta con ese correo.
+    if (payload.invitado) {
+      if (!usuario.es_invitado) {
+        return res.status(401).json({ error: "Ya creaste tu cuenta: inicia sesión para continuar." });
+      }
+      if (!req.permiteInvitada) {
+        return res.status(403).json({ error: "Para esto necesitas una cuenta. Crea la tuya con el mismo correo." });
+      }
     }
 
     req.usuario = {
@@ -28,6 +39,9 @@ function requiereAutenticacion(req, res, next) {
       id_rol: usuario.id_rol,
       rol: usuario.rol,
       email: usuario.email,
+      invitada: Boolean(payload.invitado),
+      // Una invitada solo ve lo que creo en esta sesion (no el historial de ese correo)
+      sesionDesde: payload.invitado ? new Date(payload.iat * 1000).toISOString().slice(0, 19).replace("T", " ") : null,
     };
     next();
   } catch (err) {
@@ -51,4 +65,19 @@ function requiereRol(...rolesPermitidos) {
   };
 }
 
-module.exports = { requiereAutenticacion, requiereRol };
+/** Se pone antes de requiereAutenticacion en las rutas que aceptan una sesion de invitada */
+function permitirInvitada(req, res, next) {
+  req.permiteInvitada = true;
+  next();
+}
+
+/**
+ * Para una invitada, true solo si el registro (cita o pedido) se creo durante su sesion.
+ * `fechaCreacion` viene de la base en UTC ('AAAA-MM-DD HH:MM:SS').
+ */
+function creadoEnSesion(usuario, fechaCreacion) {
+  if (!usuario?.invitada) return true;
+  return Boolean(fechaCreacion) && fechaCreacion >= usuario.sesionDesde;
+}
+
+module.exports = { requiereAutenticacion, requiereRol, permitirInvitada, creadoEnSesion };

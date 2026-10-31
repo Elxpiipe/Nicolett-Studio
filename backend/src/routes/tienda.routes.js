@@ -2,7 +2,7 @@
 const { Router } = require("express");
 const { body, param, query, validationResult } = require("express-validator");
 const ctrl = require("../controllers/tienda.controller");
-const { requiereAutenticacion, requiereRol } = require("../middleware/auth.middleware");
+const { requiereAutenticacion, requiereRol, permitirInvitada } = require("../middleware/auth.middleware");
 const { crearSubida } = require("../middleware/upload.middleware");
 
 function manejarErrores(req, res, next) {
@@ -15,6 +15,7 @@ function manejarErrores(req, res, next) {
   }
   next();
 }
+const asincrono = require("../utils/asincrono");
 
 const soloAdmin = [requiereAutenticacion, requiereRol("Administrador")];
 const idParam = [param("id").isInt({ min: 1 }).withMessage("Id invalido"), manejarErrores];
@@ -40,17 +41,18 @@ const camposProducto = (crear) => [
 ];
 
 const productos = Router();
-productos.get("/", ctrl.listarPublico);
-productos.get("/admin", ...soloAdmin, ctrl.listarAdmin);
-productos.post("/", ...soloAdmin, ...camposProducto(true), ctrl.crear);
-productos.put("/:id", ...soloAdmin, ...idParam, ...camposProducto(false), ctrl.actualizar);
-productos.put("/:id/estado", ...soloAdmin, ...idParam, body("activo").isBoolean(), manejarErrores, ctrl.cambiarEstado);
-productos.post("/:id/imagen", ...soloAdmin, ...idParam, crearSubida("productos", "producto"), ctrl.subirImagen);
-productos.delete("/:id/imagen", ...soloAdmin, ...idParam, ctrl.quitarImagen);
+productos.get("/", asincrono(ctrl.listarPublico));
+productos.get("/admin", ...soloAdmin, asincrono(ctrl.listarAdmin));
+productos.post("/", ...soloAdmin, ...camposProducto(true), asincrono(ctrl.crear));
+productos.put("/:id", ...soloAdmin, ...idParam, ...camposProducto(false), asincrono(ctrl.actualizar));
+productos.put("/:id/estado", ...soloAdmin, ...idParam, body("activo").isBoolean(), manejarErrores, asincrono(ctrl.cambiarEstado));
+productos.post("/:id/imagen", ...soloAdmin, ...idParam, crearSubida("productos", "producto"), asincrono(ctrl.subirImagen));
+productos.delete("/:id/imagen", ...soloAdmin, ...idParam, asincrono(ctrl.quitarImagen));
 
 const pedidos = Router();
 pedidos.post(
   "/",
+  permitirInvitada, // tambien sin cuenta (invitada)
   requiereAutenticacion,
   requiereRol("Cliente"),
   body("items").isArray({ min: 1, max: 30 }).withMessage("El carrito está vacío"),
@@ -58,7 +60,7 @@ pedidos.post(
   body("items.*.cantidad").isInt({ min: 1, max: 20 }).withMessage("Cantidad inválida (1 a 20)"),
   body("notas").optional({ values: "falsy" }).trim().isLength({ max: 300 }),
   manejarErrores,
-  ctrl.crearPedido
+  asincrono(ctrl.crearPedido)
 );
 pedidos.get(
   "/",
@@ -66,10 +68,10 @@ pedidos.get(
   query("estado").optional({ values: "falsy" }).isIn(["PENDIENTE", "PAGADA", "ANULADA"]),
   query("entregada").optional({ values: "falsy" }).isIn(["0", "1"]),
   manejarErrores,
-  ctrl.listarPedidos
+  asincrono(ctrl.listarPedidos)
 );
-pedidos.get("/mios", requiereAutenticacion, requiereRol("Cliente"), ctrl.misPedidos);
-pedidos.get("/:codigo", requiereAutenticacion, ...codigoPedido, ctrl.obtenerPedido);
-pedidos.post("/:codigo/entregar", ...soloAdmin, ...codigoPedido, ctrl.entregarPedido);
+pedidos.get("/mios", requiereAutenticacion, requiereRol("Cliente"), asincrono(ctrl.misPedidos));
+pedidos.get("/:codigo", permitirInvitada, requiereAutenticacion, ...codigoPedido, asincrono(ctrl.obtenerPedido));
+pedidos.post("/:codigo/entregar", ...soloAdmin, ...codigoPedido, asincrono(ctrl.entregarPedido));
 
 module.exports = { productos, pedidos, manejarErrores };

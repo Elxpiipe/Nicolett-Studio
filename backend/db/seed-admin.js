@@ -7,6 +7,7 @@
 //   node db/seed-admin.js "Nombre" "Apellido" "correo@dominio.cl" "PasswordSegura1"
 
 require("dotenv").config();
+const db = require("./connection");
 const usuarioModel = require("../src/models/usuario.model");
 const { hashPassword } = require("../src/utils/password");
 const { ROLES } = require("../src/utils/roles");
@@ -20,22 +21,32 @@ if (!nombres || !apellidos || !email || !password) {
   process.exit(1);
 }
 
-const existente = usuarioModel.findByEmail(email);
-if (existente) {
-  console.error("Ya existe un usuario con ese email.");
-  process.exit(1);
+async function main() {
+  const existente = await usuarioModel.findByEmail(email);
+  if (existente) {
+    console.error("Ya existe un usuario con ese email.");
+    process.exitCode = 1;
+    return;
+  }
+
+  const usuario = await usuarioModel.crearUsuarioConPerfil({
+    id_rol: ROLES.ADMINISTRADOR.id_rol,
+    nombres,
+    apellidos,
+    email,
+    password_hash: hashPassword(password),
+  });
+
+  console.log("Administrador creado:", {
+    id_usuario: usuario.id_usuario,
+    email: usuario.email,
+    rol: usuario.rol,
+  });
 }
 
-const usuario = usuarioModel.crearUsuarioConPerfil({
-  id_rol: ROLES.ADMINISTRADOR.id_rol,
-  nombres,
-  apellidos,
-  email,
-  password_hash: hashPassword(password),
-});
-
-console.log("Administrador creado:", {
-  id_usuario: usuario.id_usuario,
-  email: usuario.email,
-  rol: usuario.rol,
-});
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(() => db.close());

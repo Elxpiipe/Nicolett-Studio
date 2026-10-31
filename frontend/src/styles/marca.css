@@ -18,7 +18,7 @@
   display: flex;
   align-items: center;
   gap: 20px;
-  padding: 12px clamp(16px, 4vw, 44px);
+  padding: 12px var(--margen-lateral);
   background: rgba(252, 249, 244, 0.94);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--nude);
@@ -398,7 +398,7 @@
 }
 
 .pie-franja {
-  max-width: 980px;
+  max-width: 1280px;
   margin: 0 auto;
   background: var(--cacao);
   border-radius: 999px;
@@ -649,7 +649,7 @@
 }
 
 .hoja-ancha {
-  width: min(760px, 100%);
+  width: min(920px, 100%);
 }
 
 .hoja:focus {
@@ -813,4 +813,80 @@
   min-width: 26px;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Datos para reservar o comprar sin cuenta (invitada) ---------- */
+
+.datos-invitada {
+  border: 1px solid var(--nude);
+  border-radius: var(--radio, 18px);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 16px 18px 12px;
+  margin: 18px 0;
+  min-width: 0;
+}
+
+.datos-invitada legend {
+  font-family: var(--fuente-display);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.95rem;
+  padding: 0 6px;
+  color: var(--tinta);
+}
+
+.datos-invitada-ayuda,
+.datos-invitada-pie {
+  margin: 0 0 12px;
+  font-size: 0.86rem;
+  color: var(--tinta-suave);
+}
+
+.datos-invitada-pie {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+}
+
+.datos-invitada-grilla {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+}
+
+@media (max-width: 520px) {
+  .datos-invitada-grilla {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Invitacion a crear cuenta despues de reservar o comprar sin cuenta */
+.invitacion-cuenta {
+  margin: 18px auto 0;
+  max-width: 520px;
+  padding: 16px 18px;
+  border: 1px dashed var(--dorado-claro);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.75);
+  text-align: center;
+}
+
+.invitacion-cuenta p {
+  margin: 0 0 12px;
+  color: var(--tinta-suave);
+  font-size: 0.92rem;
+}
+
+/* Clienta que reservo o compro sin crear cuenta (panel de gestion) */
+.etiqueta-invitada {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  opacity: 0.75;
 }

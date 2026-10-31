@@ -101,30 +101,31 @@ function traducirError(status, detalle) {
 // Configuracion
 // ------------------------------------------------------------------
 
-function modo() {
-  const valor = configuracion.obtenerTexto("GOOGLE_CAL_MODO", "desactivado");
+async function modo() {
+  const valor = await configuracion.obtenerTexto("GOOGLE_CAL_MODO", "desactivado");
   return ["compartido", "por_profesional"].includes(valor) ? valor : "desactivado";
 }
 
-function profesionalesActivos() {
+async function profesionalesActivos() {
   return db
     .prepare(
       `SELECT p.id_profesional, p.alias_calendario, p.google_calendar_id, u.nombres, u.apellidos
        FROM profesionales p JOIN usuarios u ON u.id_usuario = p.id_usuario
-       WHERE p.activo = 1 AND u.activo = 1`
+       WHERE p.activo = 1 AND u.activo = 1
+       ORDER BY p.id_profesional`
     )
     .all();
 }
 
 /** Calendarios a revisar: [{ calendarId, id_profesional|null, etiqueta }] */
-function calendariosObjetivo() {
-  const m = modo();
+async function calendariosObjetivo() {
+  const m = await modo();
   if (m === "compartido") {
-    const id = configuracion.obtenerTexto("GOOGLE_CAL_ID", "").trim();
+    const id = (await configuracion.obtenerTexto("GOOGLE_CAL_ID", "")).trim();
     return id ? [{ calendarId: id, id_profesional: null, etiqueta: "Calendario del salón" }] : [];
   }
   if (m === "por_profesional") {
-    return profesionalesActivos()
+    return (await profesionalesActivos())
       .filter((p) => p.google_calendar_id)
       .map((p) => ({
         calendarId: p.google_calendar_id.trim(),
@@ -136,11 +137,11 @@ function calendariosObjetivo() {
 }
 
 /** Calendario donde se escriben las citas de una profesional (o null) */
-function calendarioParaProfesional(id_profesional) {
-  const m = modo();
-  if (m === "compartido") return configuracion.obtenerTexto("GOOGLE_CAL_ID", "").trim() || null;
+async function calendarioParaProfesional(id_profesional) {
+  const m = await modo();
+  if (m === "compartido") return (await configuracion.obtenerTexto("GOOGLE_CAL_ID", "")).trim() || null;
   if (m === "por_profesional") {
-    const fila = db
+    const fila = await db
       .prepare(`SELECT google_calendar_id FROM profesionales WHERE id_profesional = ?`)
       .get(id_profesional);
     return fila?.google_calendar_id?.trim() || null;
@@ -221,14 +222,15 @@ async function listarEventos(calendarId, desde, hasta) {
  * Si Google falla, NO bloquea las reservas: devuelve error para mostrar un aviso.
  */
 async function obtenerOcupacion() {
-  const objetivos = calendariosObjetivo();
-  if (modo() === "desactivado" || objetivos.length === 0) {
+  const objetivos = await calendariosObjetivo();
+  const modoActual = await modo();
+  if (modoActual === "desactivado" || objetivos.length === 0) {
     return { activo: false, error: null, porProfesional: new Map(), general: [] };
   }
 
-  const { diasMaximosReserva } = configuracion.reglasAgenda();
+  const { diasMaximosReserva } = await configuracion.reglasAgenda();
   const hoy = ahoraChile().fecha;
-  const clave = JSON.stringify([modo(), objetivos, hoy]);
+  const clave = JSON.stringify([modoActual, objetivos, hoy]);
   if (cache.clave === clave && Date.now() < cache.hasta) return cache.datos;
 
   const resultado = { activo: true, error: null, porProfesional: new Map(), general: [] };
@@ -238,7 +240,7 @@ async function obtenerOcupacion() {
   };
 
   try {
-    const profesionales = profesionalesActivos().map((p) => ({ ...p, alias: aliasDe(p) }));
+    const profesionales = (await profesionalesActivos()).map((p) => ({ ...p, alias: aliasDe(p) }));
     const desde = `${hoy} 00:00`;
     const hasta = `${sumarDias(hoy, diasMaximosReserva + 1)} 00:00`;
 
@@ -366,8 +368,8 @@ function correoCuentaServicio() {
 /** Estado de la conexion: credenciales, modo y acceso a cada calendario */
 async function estado() {
   const salida = {
-    modo: modo(),
-    calendarioCompartido: configuracion.obtenerTexto("GOOGLE_CAL_ID", ""),
+    modo: await modo(),
+    calendarioCompartido: await configuracion.obtenerTexto("GOOGLE_CAL_ID", ""),
     credencialesCargadas: false,
     cuentaServicio: null,
     calendarios: [],
@@ -383,7 +385,7 @@ async function estado() {
   }
   if (!salida.credencialesCargadas || salida.modo === "desactivado") return salida;
 
-  for (const objetivo of calendariosObjetivo()) {
+  for (const objetivo of await calendariosObjetivo()) {
     const item = { ...objetivo, ok: false, nombre: null, error: null };
     try {
       const cal = await peticion({ url: `/calendars/${encodeURIComponent(objetivo.calendarId)}` });
@@ -400,7 +402,7 @@ async function estado() {
 
 /** Crea un evento de prueba de 30 minutos (en ~1 hora) en cada calendario configurado */
 async function crearEventosPrueba() {
-  const objetivos = calendariosObjetivo();
+  const objetivos = await calendariosObjetivo();
   if (!objetivos.length) {
     const error = new Error("No hay calendarios configurados para probar.");
     error.status = 400;

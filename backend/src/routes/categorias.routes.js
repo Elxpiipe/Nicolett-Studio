@@ -7,18 +7,19 @@ const {
   validarActualizarCategoria,
   validarIdCategoriaParam,
 } = require("../utils/validators");
+const asincrono = require("../utils/asincrono");
 
 const router = Router();
 
 // Publica: el catalogo se puede navegar sin loguearse
-router.get("/", categoriasController.listar);
+router.get("/", asincrono(categoriasController.listar));
 
 // Desde aqui, solo Administrador
 router.use(requiereAutenticacion, requiereRol("Administrador"));
 
-router.post("/", validarCrearCategoria, categoriasController.crear);
-router.put("/:id", validarIdCategoriaParam, validarActualizarCategoria, categoriasController.actualizar);
-router.delete("/:id", validarIdCategoriaParam, categoriasController.eliminar);
-router.put("/:id/reactivar", validarIdCategoriaParam, categoriasController.reactivar);
+router.post("/", validarCrearCategoria, asincrono(categoriasController.crear));
+router.put("/:id", validarIdCategoriaParam, validarActualizarCategoria, asincrono(categoriasController.actualizar));
+router.delete("/:id", validarIdCategoriaParam, asincrono(categoriasController.eliminar));
+router.put("/:id/reactivar", validarIdCategoriaParam, asincrono(categoriasController.reactivar));
 
 module.exports = router;

@@ -3,7 +3,7 @@
    ========================================================== */
 
 .agenda {
-  max-width: 1240px;
+  max-width: var(--ancho-pagina);
 }
 
 .agenda-dia {

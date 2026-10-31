@@ -6,46 +6,47 @@ const db = require("../../db/connection");
 const { ahoraChile } = require("../utils/fechas");
 
 /** id_cliente del usuario con sesion (null si no es clienta) */
-function clienteDeUsuario(id_usuario) {
-  const fila = db.prepare(`SELECT id_cliente FROM clientes WHERE id_usuario = ?`).get(id_usuario);
+async function clienteDeUsuario(id_usuario) {
+  const fila = await db.prepare(`SELECT id_cliente FROM clientes WHERE id_usuario = ?`).get(id_usuario);
   return fila ? fila.id_cliente : null;
 }
 
 /** Reserva PENDIENTE_ABONO de la clienta cuyo plazo de pago aun no vence */
-function pendienteVigenteDeCliente(id_cliente) {
+async function pendienteVigenteDeCliente(id_cliente) {
   return db
     .prepare(
       `SELECT codigo_cita, fecha_hora_inicio, metodo_abono, fecha_expiracion_abono
        FROM citas
        WHERE id_cliente = ? AND estado = 'PENDIENTE_ABONO'
          AND (fecha_expiracion_abono IS NULL OR fecha_expiracion_abono > ?)
-       ORDER BY fecha_creacion DESC LIMIT 1`
+       ORDER BY fecha_creacion DESC, id_cita ASC LIMIT 1`
     )
     .get(id_cliente, ahoraChile().texto);
 }
 
 /** Codigo corto y legible: NS-260930-K7Q2 (sirve tambien como orden de compra en Webpay) */
-function generarCodigo(fecha) {
+async function generarCodigo(fecha) {
   const existe = db.prepare(`SELECT 1 FROM citas WHERE codigo_cita = ?`);
   const base = `NS-${fecha.slice(2).replace(/-/g, "")}-`;
   for (;;) {
     const codigo = base + crypto.randomBytes(3).toString("hex").slice(0, 4).toUpperCase();
-    if (!existe.get(codigo)) return codigo;
+    if (!(await existe.get(codigo))) return codigo;
   }
 }
 
 /**
  * Crea la cita PENDIENTE_ABONO, su servicio y el pago del abono (PENDIENTE).
- * La disponibilidad se valida ANTES en reservas.service.js, en el mismo bloque
- * sincronico, por lo que dos reservas no pueden tomar la misma hora.
+ * La disponibilidad se valida ANTES en reservas.service.js, dentro de la misma
+ * transaccion (db.transaction), por lo que dos reservas no pueden tomar la misma hora.
  */
-const crearReservaPendiente = db.transaction((d) => {
-  const codigo = generarCodigo(d.fecha_hora_inicio.slice(0, 10));
-  const { lastInsertRowid: id_cita } = db
+const crearReservaPendiente = db.transaction(async (d) => {
+  const codigo = await generarCodigo(d.fecha_hora_inicio.slice(0, 10));
+  const { lastInsertRowid: id_cita } = await db
     .prepare(
       `INSERT INTO citas (codigo_cita, id_cliente, id_profesional, fecha_hora_inicio, fecha_hora_fin,
                           estado, notas_cliente, metodo_abono, fecha_expiracion_abono)
-       VALUES (?, ?, ?, ?, ?, 'PENDIENTE_ABONO', ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, 'PENDIENTE_ABONO', ?, ?, ?)
+       RETURNING id_cita`
     )
     .run(
       codigo,
@@ -58,12 +59,12 @@ const crearReservaPendiente = db.transaction((d) => {
       d.fecha_expiracion_abono
     );
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO cita_servicio (id_cita, id_servicio, precio_aplicado, duracion_minutos, id_variante, variante)
      VALUES (?, ?, ?, ?, ?, ?)`
   ).run(id_cita, d.id_servicio, d.precio, d.duracion, d.id_variante ?? null, d.variante ?? null);
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO pagos (id_cita, tipo_pago, monto, metodo_pago, estado)
      VALUES (?, 'ABONO_CITA', ?, ?, 'PENDIENTE')`
   ).run(id_cita, d.monto_abono, d.metodo_abono === "WEBPAY" ? "PASARELA_WEB" : "TRANSFERENCIA");
@@ -72,7 +73,7 @@ const crearReservaPendiente = db.transaction((d) => {
 });
 
 /** Detalle completo de una reserva, para la clienta y para el panel */
-function obtenerPorCodigo(codigo_cita) {
+async function obtenerPorCodigo(codigo_cita) {
   return db
     .prepare(
       `SELECT c.id_cita, c.codigo_cita, c.id_cliente, c.id_profesional,
@@ -97,7 +98,7 @@ function obtenerPorCodigo(codigo_cita) {
        JOIN usuarios uc ON uc.id_usuario = cl.id_usuario
        LEFT JOIN pagos pg ON pg.id_cita = c.id_cita AND pg.tipo_pago = 'ABONO_CITA'
        WHERE c.codigo_cita = ?
-       ORDER BY pg.id_pago DESC LIMIT 1`
+       ORDER BY pg.id_pago DESC NULLS LAST LIMIT 1`
     )
     .get(codigo_cita);
 }
@@ -106,7 +107,7 @@ function obtenerPorCodigo(codigo_cita) {
  * Listado para el panel de administracion.
  * filtros: { estado, metodo_abono, desde: 'AAAA-MM-DD', hasta: 'AAAA-MM-DD' }
  */
-function listar({ estado, metodo_abono, desde, hasta } = {}) {
+async function listar({ estado, metodo_abono, desde, hasta } = {}) {
   const condiciones = [];
   const params = {};
   if (estado) {
@@ -126,26 +127,26 @@ function listar({ estado, metodo_abono, desde, hasta } = {}) {
     params.hasta = `${hasta} 24:00`;
   }
   const where = condiciones.length ? `WHERE ${condiciones.join(" AND ")}` : "";
-  return db
+  const filas = await db
     .prepare(
       `SELECT c.codigo_cita FROM citas c ${where}
-       ORDER BY c.fecha_hora_inicio ASC LIMIT 300`
+       ORDER BY c.fecha_hora_inicio ASC, c.id_cita ASC LIMIT 300`
     )
-    .all(params)
-    .map((f) => obtenerPorCodigo(f.codigo_cita));
+    .all(params);
+  return Promise.all(filas.map((f) => obtenerPorCodigo(f.codigo_cita)));
 }
 
 /** Todas las citas de una clienta (proximas e historial) */
-function listarDeCliente(id_cliente) {
-  return db
-    .prepare(`SELECT codigo_cita FROM citas WHERE id_cliente = ? ORDER BY fecha_hora_inicio DESC LIMIT 200`)
-    .all(id_cliente)
-    .map((f) => obtenerPorCodigo(f.codigo_cita));
+async function listarDeCliente(id_cliente) {
+  const filas = await db
+    .prepare(`SELECT codigo_cita FROM citas WHERE id_cliente = ? ORDER BY fecha_hora_inicio DESC, id_cita ASC LIMIT 200`)
+    .all(id_cliente);
+  return Promise.all(filas.map((f) => obtenerPorCodigo(f.codigo_cita)));
 }
 
 /** Mueve la cita a otra hora (y posiblemente otra profesional) */
-function moverCita(id_cita, { id_profesional, fecha_hora_inicio, fecha_hora_fin }) {
-  db.prepare(
+async function moverCita(id_cita, { id_profesional, fecha_hora_inicio, fecha_hora_fin }) {
+  await db.prepare(
     `UPDATE citas SET id_profesional = ?, fecha_hora_inicio = ?, fecha_hora_fin = ?,
        veces_reagendada = veces_reagendada + 1
      WHERE id_cita = ?`
@@ -153,21 +154,21 @@ function moverCita(id_cita, { id_profesional, fecha_hora_inicio, fecha_hora_fin 
 }
 
 /** Cancela la cita. El abono pagado NO se devuelve (regla del salon). */
-const cancelarPorCliente = db.transaction((id_cita, motivo) => {
-  db.prepare(
-    `UPDATE citas SET estado = 'CANCELADA', fecha_cancelacion = CURRENT_TIMESTAMP,
+const cancelarPorCliente = db.transaction(async (id_cita, motivo) => {
+  await db.prepare(
+    `UPDATE citas SET estado = 'CANCELADA', fecha_cancelacion = fecha_actual_utc(),
        motivo_cancelacion = ?, fecha_expiracion_abono = NULL
      WHERE id_cita = ?`
   ).run(motivo, id_cita);
   // Solo se anula un abono que nunca se pago
-  db.prepare(
+  await db.prepare(
     `UPDATE pagos SET estado = 'ANULADO'
      WHERE id_cita = ? AND tipo_pago = 'ABONO_CITA' AND estado IN ('PENDIENTE','RECHAZADO')`
   ).run(id_cita);
 });
 
 /** Citas de un dia (para la agenda), sin canceladas ni pendientes vencidas */
-function citasDelDia(fecha, id_profesional, ahora) {
+async function citasDelDia(fecha, id_profesional, ahora) {
   const cond = ["substr(c.fecha_hora_inicio, 1, 10) = @fecha", "c.estado <> 'CANCELADA'"];
   const params = { fecha, ahora };
   cond.push("NOT (c.estado = 'PENDIENTE_ABONO' AND c.fecha_expiracion_abono IS NOT NULL AND c.fecha_expiracion_abono <= @ahora)");
@@ -175,22 +176,22 @@ function citasDelDia(fecha, id_profesional, ahora) {
     cond.push("c.id_profesional = @id_profesional");
     params.id_profesional = id_profesional;
   }
-  return db
-    .prepare(`SELECT codigo_cita FROM citas c WHERE ${cond.join(" AND ")} ORDER BY c.fecha_hora_inicio`)
-    .all(params)
-    .map((f) => obtenerPorCodigo(f.codigo_cita));
+  const filas = await db
+    .prepare(`SELECT codigo_cita FROM citas c WHERE ${cond.join(" AND ")} ORDER BY c.fecha_hora_inicio, c.id_cita`)
+    .all(params);
+  return Promise.all(filas.map((f) => obtenerPorCodigo(f.codigo_cita)));
 }
 
 /**
  * Marca el resultado de la cita. ATENDIDA guarda observaciones en "atenciones";
  * CONFIRMADA deshace una marca equivocada.
  */
-const registrarAtencion = db.transaction((id_cita, estado, observaciones, id_usuario, fecha) => {
-  db.prepare(
+const registrarAtencion = db.transaction(async (id_cita, estado, observaciones, id_usuario, fecha) => {
+  await db.prepare(
     `UPDATE citas SET estado = ?, fecha_atencion = ?, id_usuario_atencion = ? WHERE id_cita = ?`
   ).run(estado, estado === "CONFIRMADA" ? null : fecha, estado === "CONFIRMADA" ? null : id_usuario, id_cita);
   if (estado === "ATENDIDA") {
-    db.prepare(
+    await db.prepare(
       `INSERT INTO atenciones (id_cita, observaciones) VALUES (?, ?)
        ON CONFLICT(id_cita) DO UPDATE SET observaciones = excluded.observaciones`
     ).run(id_cita, observaciones || null);

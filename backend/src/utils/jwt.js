@@ -8,8 +8,8 @@ if (!JWT_SECRET) {
   throw new Error("Falta JWT_SECRET en las variables de entorno (.env)");
 }
 
-function generarToken(payload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+function generarToken(payload, expiresIn = JWT_EXPIRES_IN) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn });
 }
 
 function verificarToken(token) {

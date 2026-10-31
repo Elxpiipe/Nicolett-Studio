@@ -2,6 +2,7 @@
 // SOLO PARA DEMOS: crea una cuenta de Administrador y una de Cliente de prueba.
 // Si ya existen, no hace nada. Uso: node db/seed-demo-cuentas.js
 require("dotenv").config();
+const db = require("./connection");
 const usuarioModel = require("../src/models/usuario.model");
 const { ROLES } = require("../src/utils/roles");
 const { hashPassword } = require("../src/utils/password");
@@ -14,11 +15,11 @@ const CUENTAS = [
 
 (async () => {
   for (const c of CUENTAS) {
-    if (usuarioModel.findByEmail(c.email)) {
+    if (await usuarioModel.findByEmail(c.email)) {
       console.log(`Ya existe ${c.email}`);
       continue;
     }
-    usuarioModel.crearUsuarioConPerfil({
+    await usuarioModel.crearUsuarioConPerfil({
       id_rol: c.rol.id_rol,
       nombres: c.nombres,
       apellidos: c.apellidos,
@@ -27,4 +28,9 @@ const CUENTAS = [
     });
     console.log(`Creada ${c.email} / ${c.password} (${c.rol.nombre})`);
   }
-})();
+})()
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(() => db.close());

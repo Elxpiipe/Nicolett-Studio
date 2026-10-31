@@ -11,9 +11,9 @@ function aNumeroONull(valor) {
  * Publica: cualquiera puede ver el listado de categorias (util para mostrar
  * el catalogo antes de loguearse).
  */
-function listar(req, res) {
+async function listar(req, res) {
   const soloActivas = req.query.soloActivas === "1";
-  const categorias = categoriaModel.listar({ soloActivas });
+  const categorias = await categoriaModel.listar({ soloActivas });
   return res.json({ datos: categorias });
 }
 
@@ -21,15 +21,15 @@ function listar(req, res) {
  * POST /api/categorias
  * Solo Administrador.
  */
-function crear(req, res) {
+async function crear(req, res) {
   const { nombre, descripcion } = req.body;
   const abono = aNumeroONull(req.body.abono);
 
-  if (categoriaModel.buscarPorNombre(nombre)) {
+  if (await categoriaModel.buscarPorNombre(nombre)) {
     return res.status(409).json({ error: "Ya existe una categoria con ese nombre" });
   }
 
-  const categoria = categoriaModel.crear({ nombre, descripcion, abono, indicaciones: req.body.indicaciones, adicionales: req.body.adicionales });
+  const categoria = await categoriaModel.crear({ nombre, descripcion, abono, indicaciones: req.body.indicaciones, adicionales: req.body.adicionales });
   return res.status(201).json({ categoria });
 }
 
@@ -37,9 +37,9 @@ function crear(req, res) {
  * PUT /api/categorias/:id
  * Solo Administrador.
  */
-function actualizar(req, res) {
+async function actualizar(req, res) {
   const id_categoria = Number(req.params.id);
-  const existente = categoriaModel.obtener(id_categoria);
+  const existente = await categoriaModel.obtener(id_categoria);
   if (!existente) {
     return res.status(404).json({ error: "Categoria no encontrada" });
   }
@@ -48,13 +48,13 @@ function actualizar(req, res) {
   const abono = req.body.abono === undefined ? undefined : aNumeroONull(req.body.abono);
 
   if (nombre) {
-    const conMismoNombre = categoriaModel.buscarPorNombre(nombre);
+    const conMismoNombre = await categoriaModel.buscarPorNombre(nombre);
     if (conMismoNombre && conMismoNombre.id_categoria !== id_categoria) {
       return res.status(409).json({ error: "Ya existe otra categoria con ese nombre" });
     }
   }
 
-  const categoria = categoriaModel.actualizar(id_categoria, { nombre, descripcion, abono, indicaciones: req.body.indicaciones, adicionales: req.body.adicionales, orden: req.body.orden });
+  const categoria = await categoriaModel.actualizar(id_categoria, { nombre, descripcion, abono, indicaciones: req.body.indicaciones, adicionales: req.body.adicionales, orden: req.body.orden });
   return res.json({ categoria });
 }
 
@@ -63,21 +63,21 @@ function actualizar(req, res) {
  * Baja logica. Solo Administrador. No se permite si tiene servicios activos,
  * para no dejar servicios "huerfanos" de categoria visible.
  */
-function eliminar(req, res) {
+async function eliminar(req, res) {
   const id_categoria = Number(req.params.id);
-  const existente = categoriaModel.obtener(id_categoria);
+  const existente = await categoriaModel.obtener(id_categoria);
   if (!existente) {
     return res.status(404).json({ error: "Categoria no encontrada" });
   }
 
-  const totalServicios = categoriaModel.contarServiciosEnCategoria(id_categoria);
+  const totalServicios = await categoriaModel.contarServiciosEnCategoria(id_categoria);
   if (totalServicios > 0) {
     return res.status(409).json({
       error: `No puedes deshabilitar esta categoria: tiene ${totalServicios} servicio(s) activo(s). Deshabilita o reasigna esos servicios primero.`,
     });
   }
 
-  const categoria = categoriaModel.cambiarEstadoActivo(id_categoria, false);
+  const categoria = await categoriaModel.cambiarEstadoActivo(id_categoria, false);
   return res.json({ mensaje: "Categoria deshabilitada", categoria });
 }
 
@@ -85,14 +85,14 @@ function eliminar(req, res) {
  * PUT /api/categorias/:id/reactivar
  * Solo Administrador.
  */
-function reactivar(req, res) {
+async function reactivar(req, res) {
   const id_categoria = Number(req.params.id);
-  const existente = categoriaModel.obtener(id_categoria);
+  const existente = await categoriaModel.obtener(id_categoria);
   if (!existente) {
     return res.status(404).json({ error: "Categoria no encontrada" });
   }
 
-  const categoria = categoriaModel.cambiarEstadoActivo(id_categoria, true);
+  const categoria = await categoriaModel.cambiarEstadoActivo(id_categoria, true);
   return res.json({ mensaje: "Categoria reactivada", categoria });
 }
 

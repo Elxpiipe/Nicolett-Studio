@@ -4,8 +4,8 @@ const profesionalModel = require("../models/profesional.model");
 const { aMinutos, aHora } = require("../utils/fechas");
 
 /** GET /api/sitio/equipo — profesionales visibles para "Nosotras" */
-function equipo(req, res) {
-  return res.json({ datos: profesionalModel.listarPublico() });
+async function equipo(req, res) {
+  return res.json({ datos: await profesionalModel.listarPublico() });
 }
 
 /**
@@ -13,9 +13,9 @@ function equipo(req, res) {
  * de los horarios de las profesionales activas. Se actualiza solo.
  * { datos: [{ dia_semana: 1, tramos: [{ desde: '10:00', hasta: '19:00' }] }, ...] }
  */
-function horario(req, res) {
+async function horario(req, res) {
   const porDia = new Map();
-  for (const t of profesionalModel.tramosActivos()) {
+  for (const t of await profesionalModel.tramosActivos()) {
     if (!porDia.has(t.dia_semana)) porDia.set(t.dia_semana, []);
     porDia.get(t.dia_semana).push([aMinutos(t.hora_inicio), aMinutos(t.hora_fin)]);
   }

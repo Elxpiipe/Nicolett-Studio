@@ -11,8 +11,8 @@ const asincrono = require("../utils/asincrono");
 
 const router = Router();
 
-router.get("/reglas", ctrl.reglas);
-router.get("/profesionales", validarConsultaServicio, ctrl.profesionalesPorServicio);
+router.get("/reglas", asincrono(ctrl.reglas));
+router.get("/profesionales", validarConsultaServicio, asincrono(ctrl.profesionalesPorServicio));
 router.get("/horas-libres", validarHorasLibres, asincrono(ctrl.horasLibres));
 router.get("/dias-disponibles", validarDiasDisponibles, asincrono(ctrl.diasDisponibles));
 

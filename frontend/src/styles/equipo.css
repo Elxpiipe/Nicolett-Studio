@@ -3,7 +3,7 @@
    ========================================================== */
 
 .equipo {
-  max-width: 1120px;
+  max-width: var(--ancho-pagina);
   width: 100%;
   margin: 0 auto;
   padding: 36px clamp(14px, 4vw, 44px) 10px;

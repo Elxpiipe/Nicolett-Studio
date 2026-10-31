@@ -18,6 +18,7 @@ const tiendaRoutes = require("./src/routes/tienda.routes");
 const promocionesRoutes = require("./src/routes/promociones.routes");
 const clientesRoutes = require("./src/routes/clientes.routes");
 const { iniciarVencimientos } = require("./src/jobs/vencimientos");
+const db = require("./db/connection");
 
 const app = express();
 
@@ -68,7 +69,21 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Nicolett Sync backend escuchando en http://localhost:${PORT}`);
-  iniciarVencimientos();
-});
+
+// Antes de escuchar: PostgreSQL debe responder y tener las tablas creadas
+async function revisarBaseDeDatos() {
+  const fila = await db.prepare(`SELECT to_regclass('public.usuarios') AS tabla`).get();
+  if (!fila.tabla) throw new Error("La base de datos no tiene las tablas. Ejecuta primero: npm run db:init");
+}
+
+revisarBaseDeDatos()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Nicolett Sync backend escuchando en http://localhost:${PORT}`);
+      iniciarVencimientos();
+    });
+  })
+  .catch((err) => {
+    console.error(`No se pudo usar PostgreSQL (${err.message}). Revisa DATABASE_URL en el .env.`);
+    process.exit(1);
+  });

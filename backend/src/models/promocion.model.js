@@ -2,7 +2,7 @@
 const db = require("../../db/connection");
 
 /** Vigentes hoy: activas y dentro de sus fechas (si las tienen) */
-function listarVigentes(hoy) {
+async function listarVigentes(hoy) {
   return db
     .prepare(
       `SELECT * FROM promociones
@@ -14,11 +14,11 @@ function listarVigentes(hoy) {
     .all(hoy, hoy);
 }
 
-function listarTodas() {
+async function listarTodas() {
   return db.prepare(`SELECT * FROM promociones ORDER BY orden, id_promocion DESC`).all();
 }
 
-function obtener(id) {
+async function obtener(id) {
   return db.prepare(`SELECT * FROM promociones WHERE id_promocion = ?`).get(id);
 }
 
@@ -35,33 +35,34 @@ function normalizar(datos) {
   return salida;
 }
 
-function crear(datos) {
+async function crear(datos) {
   const d = { descripcion: null, enlace: null, fecha_inicio: null, fecha_fin: null, orden: 0, activo: 1, ...normalizar(datos) };
-  const info = db
+  const info = await db
     .prepare(
       `INSERT INTO promociones (titulo, descripcion, enlace, fecha_inicio, fecha_fin, orden, activo)
-       VALUES (@titulo, @descripcion, @enlace, @fecha_inicio, @fecha_fin, @orden, @activo)`
+       VALUES (@titulo, @descripcion, @enlace, @fecha_inicio, @fecha_fin, @orden, @activo)
+       RETURNING id_promocion`
     )
     .run(d);
   return obtener(info.lastInsertRowid);
 }
 
-function actualizar(id, datos) {
+async function actualizar(id, datos) {
   const d = normalizar(datos);
   const campos = Object.keys(d);
   if (campos.length) {
-    db.prepare(`UPDATE promociones SET ${campos.map((c) => `${c} = @${c}`).join(", ")} WHERE id_promocion = @id`).run({ ...d, id });
+    await db.prepare(`UPDATE promociones SET ${campos.map((c) => `${c} = @${c}`).join(", ")} WHERE id_promocion = @id`).run({ ...d, id });
   }
   return obtener(id);
 }
 
-function actualizarImagen(id, imagen_url) {
-  db.prepare(`UPDATE promociones SET imagen_url = ? WHERE id_promocion = ?`).run(imagen_url, id);
+async function actualizarImagen(id, imagen_url) {
+  await db.prepare(`UPDATE promociones SET imagen_url = ? WHERE id_promocion = ?`).run(imagen_url, id);
   return obtener(id);
 }
 
-function eliminar(id) {
-  db.prepare(`DELETE FROM promociones WHERE id_promocion = ?`).run(id);
+async function eliminar(id) {
+  await db.prepare(`DELETE FROM promociones WHERE id_promocion = ?`).run(id);
 }
 
 module.exports = { listarVigentes, listarTodas, obtener, crear, actualizar, actualizarImagen, eliminar };

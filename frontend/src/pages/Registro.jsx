@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import "../styles/auth.css";
 
@@ -19,7 +19,16 @@ export default function Registro() {
   const desde = location.state?.desde;
   const destino = desde?.pathname ? `${desde.pathname}${desde.search || ""}` : "/panel";
 
-  const [form, setForm] = useState(FORM_INICIAL);
+  // Llega con datos desde "Crear mi cuenta" (reserva o compra sin cuenta)
+  const [params] = useSearchParams();
+  const [form, setForm] = useState(() => ({
+    ...FORM_INICIAL,
+    nombres: params.get("nombres") || "",
+    apellidos: params.get("apellidos") || "",
+    email: params.get("email") || "",
+    telefono: params.get("telefono") || "",
+  }));
+  const [activacion, setActivacion] = useState(null);
   const [errorGeneral, setErrorGeneral] = useState("");
   const [erroresCampo, setErroresCampo] = useState({});
   const [enviando, setEnviando] = useState(false);
@@ -50,7 +59,11 @@ export default function Registro() {
     setEnviando(true);
     try {
       const { confirmarPassword, ...payload } = form;
-      await registrarse(payload);
+      const res = await registrarse(payload);
+      if (res?.activacion) {
+        setActivacion(res);
+        return;
+      }
       navigate(destino, { replace: true });
     } catch (err) {
       if (err.detalles) {
@@ -90,6 +103,18 @@ export default function Registro() {
 
           {errorGeneral && <div className="auth-alerta">{errorGeneral}</div>}
 
+          {activacion ? (
+            <div className="auth-alerta auth-alerta-exito" role="status">
+              {activacion.mensaje ||
+                "Te enviamos un correo para activar tu cuenta. Abre el enlace y crea tu contraseña."}
+              {activacion.enlaceDirecto && (
+                <>
+                  {" "}
+                  (Modo desarrollo: <a href={activacion.enlaceDirecto}>abrir enlace de activación</a>)
+                </>
+              )}
+            </div>
+          ) : (
           <form onSubmit={manejarEnvio} noValidate>
             <div className="auth-fila-dos">
               <div className="auth-campo">
@@ -182,6 +207,7 @@ export default function Registro() {
               {enviando ? "Creando cuenta…" : "Crear cuenta"}
             </button>
           </form>
+          )}
 
           <p className="auth-pie-form">
             ¿Ya tienes cuenta? <Link to="/login" state={location.state}>Inicia sesión</Link>

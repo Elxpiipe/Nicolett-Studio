@@ -65,33 +65,41 @@ const PRODUCTOS = [
     descripcion: "Repositor de masa capilar en crema, con aceite de macadamia y ácido hialurónico." },
 ];
 
-const idAdmin = db.prepare(`SELECT id_usuario FROM usuarios WHERE id_rol = 1 ORDER BY id_usuario LIMIT 1`).get()?.id_usuario;
-
-const cargar = db.transaction(() => {
+const cargar = db.transaction(async () => {
+  const idAdmin = (await db.prepare(`SELECT id_usuario FROM usuarios WHERE id_rol = 1 ORDER BY id_usuario LIMIT 1`).get())?.id_usuario;
   let creados = 0;
   let sinPrecio = 0;
   for (const p of PRODUCTOS) {
-    if (productoModel.buscarPorNombre(p.nombre)) {
+    if (await productoModel.buscarPorNombre(p.nombre)) {
       console.log(`Ya existe "${p.nombre}", se omite.`);
       continue;
     }
-    const id = productoModel.crear(p);
-    if (STOCK_INICIAL > 0 && idAdmin) productoModel.fijarStock(id, STOCK_INICIAL, idAdmin, "Stock inicial");
+    const id = await productoModel.crear(p);
+    if (STOCK_INICIAL > 0 && idAdmin) await productoModel.fijarStock(id, STOCK_INICIAL, idAdmin, "Stock inicial");
     creados++;
     if (p.precio == null) sinPrecio++;
     console.log(`Creado: [${p.linea}] ${p.marca} · ${p.nombre} — ${p.precio == null ? "precio por definir" : "$" + p.precio}`);
   }
 
   // Ocultar los productos de ejemplo
-  const demo = db
-    .prepare(`UPDATE productos SET activo = 0 WHERE activo = 1 AND descripcion LIKE '%(Producto y precio de ejemplo)%'`)
-    .run().changes;
+  const demo = (
+    await db
+      .prepare(`UPDATE productos SET activo = 0 WHERE activo = 1 AND descripcion ILIKE '%(Producto y precio de ejemplo)%'`)
+      .run()
+  ).changes;
 
   return { creados, sinPrecio, demo };
 });
 
-const r = cargar();
-console.log(`\nListo: ${r.creados} producto(s) nuevos.`);
-if (r.sinPrecio) console.log(`${r.sinPrecio} quedaron sin precio y no se muestran en la tienda hasta que se les ponga uno.`);
-if (r.demo) console.log(`Se ocultaron ${r.demo} producto(s) de ejemplo.`);
-console.log("Siguiente paso: en /tienda (modo Administrador) agrega fotos y stock a cada producto.");
+cargar()
+  .then((r) => {
+    console.log(`\nListo: ${r.creados} producto(s) nuevos.`);
+    if (r.sinPrecio) console.log(`${r.sinPrecio} quedaron sin precio y no se muestran en la tienda hasta que se les ponga uno.`);
+    if (r.demo) console.log(`Se ocultaron ${r.demo} producto(s) de ejemplo.`);
+    console.log("Siguiente paso: en /tienda (modo Administrador) agrega fotos y stock a cada producto.");
+  })
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(() => db.close());

@@ -25,8 +25,8 @@ function seSolapa(inicio, fin, intervalos) {
  * Horas libres de UNA profesional para una duracion dada.
  * Devuelve minutos de inicio (ej. [600, 630] = 10:00, 10:30).
  */
-function horasLibresProfesional(id_profesional, fecha, duracion, reglas, ahora, ocupadosGoogle = [], excluirIdCita = null) {
-  const tramos = profesionalModel.horarioDeFecha(id_profesional, diaSemanaIso(fecha), fecha);
+async function horasLibresProfesional(id_profesional, fecha, duracion, reglas, ahora, ocupadosGoogle = [], excluirIdCita = null) {
+  const tramos = await profesionalModel.horarioDeFecha(id_profesional, diaSemanaIso(fecha), fecha);
   if (!tramos.length) return [];
 
   const inicioDia = `${fecha} 00:00`;
@@ -34,10 +34,10 @@ function horasLibresProfesional(id_profesional, fecha, duracion, reglas, ahora, 
   const ocupados = [
     // Al cambiar de hora, la propia cita no cuenta como ocupada (se puede mover 30 min)
     ...aIntervalosDelDia(
-      profesionalModel.citasQueTocan(id_profesional, inicioDia, finDia).filter((c) => c.id_cita !== excluirIdCita),
+      (await profesionalModel.citasQueTocan(id_profesional, inicioDia, finDia)).filter((c) => c.id_cita !== excluirIdCita),
       fecha
     ),
-    ...aIntervalosDelDia(profesionalModel.bloqueosQueTocan(id_profesional, inicioDia, finDia), fecha),
+    ...aIntervalosDelDia(await profesionalModel.bloqueosQueTocan(id_profesional, inicioDia, finDia), fecha),
     // Eventos anotados a mano en Google Calendar que tocan este dia
     ...aIntervalosDelDia(
       ocupadosGoogle.filter((g) => g.fecha_hora_inicio < finDia && g.fecha_hora_fin > inicioDia),
@@ -73,14 +73,14 @@ function fechaReservable(fecha, reglas, ahora) {
  * `ocupacion` permite reutilizar la lectura de Google entre varios dias.
  */
 async function horasLibres({ id_servicio, fecha, id_profesional, excluirIdCita }, ocupacion) {
-  const servicio = servicioModel.obtener(id_servicio);
+  const servicio = await servicioModel.obtener(id_servicio);
   if (!servicio || !servicio.activo) {
     const error = new Error("El servicio no existe o no está disponible");
     error.status = 404;
     throw error;
   }
 
-  const reglas = reglasAgenda();
+  const reglas = await reglasAgenda();
   const ahora = ahoraChile();
   const google = ocupacion || (await googleCalendar.obtenerOcupacion());
   const resultado = {
@@ -92,13 +92,13 @@ async function horasLibres({ id_servicio, fecha, id_profesional, excluirIdCita }
   };
   if (!fechaReservable(fecha, reglas, ahora)) return resultado;
 
-  let profesionales = profesionalModel.listarPorServicio(id_servicio);
+  let profesionales = await profesionalModel.listarPorServicio(id_servicio);
   if (id_profesional) profesionales = profesionales.filter((p) => p.id_profesional === id_profesional);
 
   const porHora = new Map();
   for (const p of profesionales) {
     const ocupadosGoogle = googleCalendar.ocupadosDeProfesional(google, p.id_profesional);
-    for (const t of horasLibresProfesional(p.id_profesional, fecha, servicio.duracion_minutos, reglas, ahora, ocupadosGoogle, excluirIdCita)) {
+    for (const t of await horasLibresProfesional(p.id_profesional, fecha, servicio.duracion_minutos, reglas, ahora, ocupadosGoogle, excluirIdCita)) {
       if (!porHora.has(t)) porHora.set(t, []);
       porHora.get(t).push({ id_profesional: p.id_profesional, nombre: `${p.nombres} ${p.apellidos}` });
     }
@@ -112,7 +112,7 @@ async function horasLibres({ id_servicio, fecha, id_profesional, excluirIdCita }
 
 /** Dias (desde hoy) que tienen al menos una hora libre; para pintar el calendario */
 async function diasDisponibles({ id_servicio, id_profesional, desde, dias = 14, excluirIdCita }) {
-  const reglas = reglasAgenda();
+  const reglas = await reglasAgenda();
   const ahora = ahoraChile();
   const inicio = desde && desde > ahora.fecha ? desde : ahora.fecha;
   const total = Math.min(dias, 42);

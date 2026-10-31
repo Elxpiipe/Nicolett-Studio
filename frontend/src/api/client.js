@@ -47,6 +47,7 @@ async function solicitud(ruta, { metodo = "GET", body, token } = {}) {
   if (!respuesta.ok) {
     const error = new Error(datos.error || "Ocurrio un error inesperado");
     error.detalles = datos.detalles;
+    error.codigo = datos.codigo;
     error.status = respuesta.status;
     throw error;
   }
@@ -57,6 +58,8 @@ async function solicitud(ruta, { metodo = "GET", body, token } = {}) {
 export const api = {
   registro: (payload) => solicitud("/auth/registro", { metodo: "POST", body: payload }),
   login: (payload) => solicitud("/auth/login", { metodo: "POST", body: payload }),
+  // Reservar o comprar sin cuenta: devuelve { token, invitada }
+  sesionInvitada: (payload) => solicitud("/auth/invitada", { metodo: "POST", body: payload }),
   perfil: (token) => solicitud("/auth/perfil", { token }),
   actualizarPerfil: (payload, token) =>
     solicitud("/auth/perfil", { metodo: "PUT", body: payload, token }),

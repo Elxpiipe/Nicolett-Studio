@@ -5,6 +5,8 @@ import { api } from "../api/client";
 import { formatearDuracion, formatearPrecio, leerLineas, textoPrecio } from "../utils/formato";
 import { enlaceWhatsApp } from "../utils/contacto";
 import { irAWebpay } from "../utils/webpay";
+import { datosInvitadaIniciales, iniciarSesionInvitada, validarDatosInvitada } from "../utils/invitada";
+import DatosInvitada from "../components/DatosInvitada";
 import BarraSitio from "../components/marca/BarraSitio";
 import PieMarca from "../components/marca/PieMarca";
 import { FotoPerfil } from "../components/marca/Fotos";
@@ -40,6 +42,8 @@ export default function Reservar() {
   const [acepta, setAcepta] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
+  const [cuentaExistente, setCuentaExistente] = useState(false);
+  const [invitada, setInvitada] = useState(datosInvitadaIniciales);
 
   // La seleccion vive en la URL: sobrevive a recargar y a ir a iniciar sesion
   const sel = {
@@ -124,14 +128,22 @@ export default function Reservar() {
     return [...grupos.entries()];
   }, [servicios]);
 
+  const desde = { pathname: "/reservar", search: `?${params.toString()}` };
+
   async function confirmar() {
     setError("");
+    setCuentaExistente(false);
+    // Sin cuenta: se reserva como invitada con nombre, correo y telefono
     if (!usuario) {
-      navigate("/login", { state: { desde: { pathname: "/reservar", search: `?${params.toString()}` } } });
-      return;
+      const problema = validarDatosInvitada(invitada);
+      if (problema) {
+        setError(problema);
+        return;
+      }
     }
     setEnviando(true);
     try {
+      const tokenReserva = usuario ? token : await iniciarSesionInvitada(invitada);
       const { reserva } = await api.crearReserva(
         {
           id_servicio: sel.servicio,
@@ -142,15 +154,16 @@ export default function Reservar() {
           metodo_abono: metodo,
           notas,
         },
-        token
+        tokenReserva
       );
       if (metodo === "WEBPAY") {
-        irAWebpay(await api.iniciarWebpayReserva(reserva.codigo_cita, token));
+        irAWebpay(await api.iniciarWebpayReserva(reserva.codigo_cita, tokenReserva));
       } else {
         navigate(`/reserva/resultado?codigo=${reserva.codigo_cita}&estado=transferencia`);
       }
     } catch (err) {
       setError(err.message);
+      setCuentaExistente(err.codigo === "CUENTA_EXISTENTE");
       setEnviando(false);
       // Si la hora se tomo mientras decidia, vuelve a elegir hora
       if (err.status === 409 && /hora/i.test(err.message)) elegir({}, ["hora"]);
@@ -203,7 +216,8 @@ export default function Reservar() {
           </div>
         )}
 
-        {error && (
+        {/* En el paso de confirmar, el error se muestra junto al boton */}
+        {error && paso < 3 && (
           <div className="aviso aviso-error" role="alert">
             <span>{error}</span>
           </div>
@@ -429,6 +443,8 @@ export default function Reservar() {
                     </ul>
                   </div>
                 )}
+                {!usuario && <DatosInvitada datos={invitada} onCambio={setInvitada} desde={desde} />}
+
                 <p className="confirmar-subtitulo">¿Cómo pagas el abono?</p>
                 <div className="metodos" role="radiogroup" aria-label="Método de pago del abono">
                   <label className={`metodo ${metodo === "WEBPAY" ? "metodo-activo" : ""}`}>
@@ -469,24 +485,31 @@ export default function Reservar() {
                   </span>
                 </label>
 
+                {error && (
+                  <div className="aviso aviso-error" role="alert">
+                    <span>
+                      {error}{" "}
+                      {cuentaExistente && (
+                        <Link to="/login" state={{ desde }}>
+                          Iniciar sesión
+                        </Link>
+                      )}
+                    </span>
+                  </div>
+                )}
+
                 {usuario && usuario.rol !== "Cliente" ? (
                   <p className="aviso aviso-error">Las reservas online se hacen con una cuenta de clienta.</p>
                 ) : (
                   <button type="button" className="boton boton-cacao boton-reservar" onClick={confirmar} disabled={!acepta || enviando}>
                     {enviando
                       ? "Reservando…"
-                      : !usuario
-                      ? "Inicia sesión para reservar"
                       : metodo === "WEBPAY"
                       ? `Reservar y pagar ${formatearPrecio(abono)}`
                       : "Reservar y coordinar transferencia"}
                   </button>
                 )}
-                {!usuario && (
-                  <p className="bloque-ayuda">
-                    ¿No tienes cuenta? <Link to="/registro" state={{ desde: { pathname: "/reservar", search: `?${params.toString()}` } }}>Créala en un minuto</Link>. Tu elección queda guardada.
-                  </p>
-                )}
+
               </div>
             </div>
           </section>

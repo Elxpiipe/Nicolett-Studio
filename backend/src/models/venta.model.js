@@ -12,30 +12,30 @@ function errorHttp(status, mensaje) {
   return error;
 }
 
-function generarCodigo(fecha) {
+async function generarCodigo(fecha) {
   const existe = db.prepare(`SELECT 1 FROM ventas WHERE codigo_venta = ?`);
   const base = `NV-${fecha.slice(2).replace(/-/g, "")}-`;
   for (;;) {
     const codigo = base + crypto.randomBytes(2).toString("hex").toUpperCase();
-    if (!existe.get(codigo)) return codigo;
+    if (!(await existe.get(codigo))) return codigo;
   }
 }
 
 /** Devuelve el stock apartado de un pedido y lo anula (sin tocar si ya estaba pagado) */
-const anular = db.transaction((id_venta, motivo) => {
-  const venta = db.prepare(`SELECT * FROM ventas WHERE id_venta = ?`).get(id_venta);
+const anular = db.transaction(async (id_venta, motivo) => {
+  const venta = await db.prepare(`SELECT * FROM ventas WHERE id_venta = ?`).get(id_venta);
   if (!venta || venta.estado !== "PENDIENTE") return false;
   if (venta.stock_reservado) {
-    const items = db
-      .prepare(`SELECT id_producto, cantidad FROM venta_detalle WHERE id_venta = ? AND tipo_item = 'PRODUCTO'`)
+    const items = await db
+      .prepare(`SELECT id_producto, cantidad FROM venta_detalle WHERE id_venta = ? AND tipo_item = 'PRODUCTO' ORDER BY id_detalle`)
       .all(id_venta);
     const devolver = db.prepare(`UPDATE productos SET stock_actual = stock_actual + ? WHERE id_producto = ?`);
-    for (const it of items) devolver.run(it.cantidad, it.id_producto);
+    for (const it of items) await devolver.run(it.cantidad, it.id_producto);
   }
-  db.prepare(
+  await db.prepare(
     `UPDATE ventas SET estado = 'ANULADA', stock_reservado = 0, motivo_anulacion = ? WHERE id_venta = ?`
   ).run(motivo, id_venta);
-  db.prepare(
+  await db.prepare(
     `UPDATE pagos SET estado = 'ANULADO' WHERE id_venta = ? AND tipo_pago = 'PAGO_VENTA' AND estado IN ('PENDIENTE','RECHAZADO')`
   ).run(id_venta);
   return true;
@@ -46,18 +46,18 @@ const anular = db.transaction((id_venta, motivo) => {
  * detalle y deja el pago PENDIENTE. Todo o nada.
  * datos = { id_cliente, id_usuario, items: [{ id_producto, cantidad }], notas, fecha_expiracion_pago }
  */
-const crearPedidoWeb = db.transaction((d) => {
+const crearPedidoWeb = db.transaction(async (d) => {
   // Si la clienta tenia otro pedido sin pagar, se reemplaza (devuelve su stock)
-  const anteriores = db
-    .prepare(`SELECT id_venta FROM ventas WHERE id_cliente = ? AND canal = 'WEB' AND estado = 'PENDIENTE'`)
+  const anteriores = await db
+    .prepare(`SELECT id_venta FROM ventas WHERE id_cliente = ? AND canal = 'WEB' AND estado = 'PENDIENTE' ORDER BY id_venta`)
     .all(d.id_cliente);
-  for (const a of anteriores) anular(a.id_venta, "Reemplazado por un pedido nuevo");
+  for (const a of anteriores) await anular(a.id_venta, "Reemplazado por un pedido nuevo");
 
   const lineas = [];
   for (const item of d.items) {
-    const p = db
+    const p = await db
       .prepare(
-        `SELECT id_producto, nombre, marca, precio_venta, CAST(stock_actual AS INTEGER) AS stock, activo
+        `SELECT id_producto, nombre, marca, precio_venta, CAST(trunc(stock_actual) AS INTEGER) AS stock, activo
          FROM productos WHERE id_producto = ?`
       )
       .get(item.id_producto);
@@ -74,12 +74,13 @@ const crearPedidoWeb = db.transaction((d) => {
   }
 
   const total = lineas.reduce((suma, l) => suma + l.subtotal, 0);
-  const codigo = generarCodigo(ahoraChile().fecha);
-  const { lastInsertRowid: id_venta } = db
+  const codigo = await generarCodigo(ahoraChile().fecha);
+  const { lastInsertRowid: id_venta } = await db
     .prepare(
       `INSERT INTO ventas (id_cliente, id_usuario_cajero, subtotal, descuento, total, estado,
                            codigo_venta, canal, fecha_expiracion_pago, stock_reservado, notas)
-       VALUES (?, ?, ?, 0, ?, 'PENDIENTE', ?, 'WEB', ?, 1, ?)`
+       VALUES (?, ?, ?, 0, ?, 'PENDIENTE', ?, 'WEB', ?, 1, ?)
+       RETURNING id_venta`
     )
     .run(d.id_cliente, d.id_usuario, total, total, codigo, d.fecha_expiracion_pago, d.notas || null);
 
@@ -90,11 +91,11 @@ const crearPedidoWeb = db.transaction((d) => {
   const apartar = db.prepare(`UPDATE productos SET stock_actual = stock_actual - ? WHERE id_producto = ?`);
   for (const l of lineas) {
     const descripcion = l.marca ? `${l.nombre} (${l.marca})` : l.nombre;
-    insertarDetalle.run(id_venta, l.id_producto, descripcion, l.cantidad, l.precio_venta, l.subtotal);
-    apartar.run(l.cantidad, l.id_producto);
+    await insertarDetalle.run(id_venta, l.id_producto, descripcion, l.cantidad, l.precio_venta, l.subtotal);
+    await apartar.run(l.cantidad, l.id_producto);
   }
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO pagos (id_venta, tipo_pago, monto, metodo_pago, estado) VALUES (?, 'PAGO_VENTA', ?, 'PASARELA_WEB', 'PENDIENTE')`
   ).run(id_venta, total);
 
@@ -102,15 +103,15 @@ const crearPedidoWeb = db.transaction((d) => {
 });
 
 /** Registra las salidas de inventario de un pedido pagado */
-function registrarSalidas(id_venta, id_usuario) {
-  const items = db
-    .prepare(`SELECT id_producto, cantidad FROM venta_detalle WHERE id_venta = ? AND tipo_item = 'PRODUCTO'`)
+async function registrarSalidas(id_venta, id_usuario) {
+  const items = await db
+    .prepare(`SELECT id_producto, cantidad FROM venta_detalle WHERE id_venta = ? AND tipo_item = 'PRODUCTO' ORDER BY id_detalle`)
     .all(id_venta);
   const mov = db.prepare(
     `INSERT INTO movimientos_inventario (id_producto, tipo, cantidad, motivo, id_usuario, id_venta)
      VALUES (?, 'SALIDA_VENTA', ?, 'Venta web', ?, ?)`
   );
-  for (const it of items) mov.run(it.id_producto, it.cantidad, id_usuario, id_venta);
+  for (const it of items) await mov.run(it.id_producto, it.cantidad, id_usuario, id_venta);
 }
 
 /**
@@ -119,39 +120,40 @@ function registrarSalidas(id_venta, id_usuario) {
  * nuevo; si ya no hay stock, el pago queda registrado y el pedido en revision.
  * Devuelve "pagado" | "revision".
  */
-const aprobarPago = db.transaction((id_pago, id_venta, detalle) => {
-  const venta = db.prepare(`SELECT * FROM ventas WHERE id_venta = ?`).get(id_venta);
-  db.prepare(
-    `UPDATE pagos SET estado = 'APROBADO', detalle_pasarela = ?, fecha_pago = CURRENT_TIMESTAMP WHERE id_pago = ?`
+const aprobarPago = db.transaction(async (id_pago, id_venta, detalle) => {
+  const venta = await db.prepare(`SELECT * FROM ventas WHERE id_venta = ?`).get(id_venta);
+  await db.prepare(
+    `UPDATE pagos SET estado = 'APROBADO', detalle_pasarela = ?, fecha_pago = fecha_actual_utc() WHERE id_pago = ?`
   ).run(JSON.stringify(detalle), id_pago);
 
   if (venta.estado === "ANULADA") {
-    const items = db
+    const items = await db
       .prepare(
-        `SELECT d.id_producto, d.cantidad, CAST(p.stock_actual AS INTEGER) AS stock
-         FROM venta_detalle d JOIN productos p ON p.id_producto = d.id_producto WHERE d.id_venta = ?`
+        `SELECT d.id_producto, d.cantidad, CAST(trunc(p.stock_actual) AS INTEGER) AS stock
+         FROM venta_detalle d JOIN productos p ON p.id_producto = d.id_producto WHERE d.id_venta = ?
+         ORDER BY d.id_detalle`
       )
       .all(id_venta);
     if (items.some((i) => i.stock < i.cantidad)) {
-      db.prepare(
+      await db.prepare(
         `UPDATE ventas SET motivo_anulacion = 'Pago recibido fuera de plazo y sin stock suficiente: reponer o devolver' WHERE id_venta = ?`
       ).run(id_venta);
       return "revision";
     }
     const apartar = db.prepare(`UPDATE productos SET stock_actual = stock_actual - ? WHERE id_producto = ?`);
-    for (const i of items) apartar.run(i.cantidad, i.id_producto);
+    for (const i of items) await apartar.run(i.cantidad, i.id_producto);
   }
 
-  db.prepare(
+  await db.prepare(
     `UPDATE ventas SET estado = 'PAGADA', stock_reservado = 0, fecha_expiracion_pago = NULL,
        fecha_pago = ?, motivo_anulacion = NULL WHERE id_venta = ?`
   ).run(ahoraChile().texto, id_venta);
-  registrarSalidas(id_venta, venta.id_usuario_cajero);
+  await registrarSalidas(id_venta, venta.id_usuario_cajero);
   return "pagado";
 });
 
-function obtenerPorCodigo(codigo_venta) {
-  const venta = db
+async function obtenerPorCodigo(codigo_venta) {
+  const venta = await db
     .prepare(
       `SELECT v.*, u.nombres || ' ' || u.apellidos AS cliente, u.email AS email_cliente, u.telefono AS telefono_cliente,
               pg.id_pago, pg.estado AS estado_pago
@@ -160,20 +162,21 @@ function obtenerPorCodigo(codigo_venta) {
        LEFT JOIN usuarios u ON u.id_usuario = c.id_usuario
        LEFT JOIN pagos pg ON pg.id_venta = v.id_venta AND pg.tipo_pago = 'PAGO_VENTA'
        WHERE v.codigo_venta = ?
-       ORDER BY pg.id_pago DESC LIMIT 1`
+       ORDER BY pg.id_pago DESC NULLS LAST LIMIT 1`
     )
     .get(codigo_venta);
   if (!venta) return null;
-  venta.items = db
+  venta.items = await db
     .prepare(
-      `SELECT d.id_producto, d.descripcion, CAST(d.cantidad AS INTEGER) AS cantidad, d.precio_unitario, d.subtotal, p.imagen_url
-       FROM venta_detalle d LEFT JOIN productos p ON p.id_producto = d.id_producto WHERE d.id_venta = ?`
+      `SELECT d.id_producto, d.descripcion, CAST(trunc(d.cantidad) AS INTEGER) AS cantidad, d.precio_unitario, d.subtotal, p.imagen_url
+       FROM venta_detalle d LEFT JOIN productos p ON p.id_producto = d.id_producto WHERE d.id_venta = ?
+       ORDER BY d.id_detalle`
     )
     .all(venta.id_venta);
   return venta;
 }
 
-function listarWeb({ estado, entregada } = {}) {
+async function listarWeb({ estado, entregada } = {}) {
   const cond = ["v.canal = 'WEB'"];
   const params = {};
   if (estado) {
@@ -182,39 +185,40 @@ function listarWeb({ estado, entregada } = {}) {
   }
   if (entregada === "0") cond.push("v.fecha_entrega IS NULL");
   if (entregada === "1") cond.push("v.fecha_entrega IS NOT NULL");
-  return db
-    .prepare(`SELECT codigo_venta FROM ventas v WHERE ${cond.join(" AND ")} ORDER BY v.fecha DESC LIMIT 200`)
-    .all(params)
-    .map((f) => obtenerPorCodigo(f.codigo_venta));
+  const filas = await db
+    .prepare(`SELECT codigo_venta FROM ventas v WHERE ${cond.join(" AND ")} ORDER BY v.fecha DESC, v.id_venta ASC LIMIT 200`)
+    .all(params);
+  return Promise.all(filas.map((f) => obtenerPorCodigo(f.codigo_venta)));
 }
 
 /** Pedidos web de una clienta (mas nuevos primero) */
-function listarDeCliente(id_cliente) {
-  return db
+async function listarDeCliente(id_cliente) {
+  const filas = await db
     .prepare(
       `SELECT codigo_venta FROM ventas WHERE id_cliente = ? AND canal = 'WEB' ORDER BY fecha DESC, id_venta DESC LIMIT 100`
     )
-    .all(id_cliente)
-    .map((f) => obtenerPorCodigo(f.codigo_venta));
+    .all(id_cliente);
+  return Promise.all(filas.map((f) => obtenerPorCodigo(f.codigo_venta)));
 }
 
-function marcarEntregada(id_venta) {
-  db.prepare(`UPDATE ventas SET fecha_entrega = ? WHERE id_venta = ?`).run(ahoraChile().texto, id_venta);
+async function marcarEntregada(id_venta) {
+  await db.prepare(`UPDATE ventas SET fecha_entrega = ? WHERE id_venta = ?`).run(ahoraChile().texto, id_venta);
 }
 
-function extenderPlazo(id_venta, fecha_expiracion_pago) {
-  db.prepare(`UPDATE ventas SET fecha_expiracion_pago = ? WHERE id_venta = ?`).run(fecha_expiracion_pago, id_venta);
+async function extenderPlazo(id_venta, fecha_expiracion_pago) {
+  await db.prepare(`UPDATE ventas SET fecha_expiracion_pago = ? WHERE id_venta = ?`).run(fecha_expiracion_pago, id_venta);
 }
 
 /** Pedidos web sin pagar cuyo plazo vencio (para la tarea de cada minuto) */
-function vencerPendientes(ahora) {
-  const vencidas = db
+async function vencerPendientes(ahora) {
+  const vencidas = await db
     .prepare(
       `SELECT id_venta, codigo_venta FROM ventas
-       WHERE canal = 'WEB' AND estado = 'PENDIENTE' AND fecha_expiracion_pago IS NOT NULL AND fecha_expiracion_pago <= ?`
+       WHERE canal = 'WEB' AND estado = 'PENDIENTE' AND fecha_expiracion_pago IS NOT NULL AND fecha_expiracion_pago <= ?
+       ORDER BY id_venta`
     )
     .all(ahora);
-  for (const v of vencidas) anular(v.id_venta, "Plazo de pago vencido");
+  for (const v of vencidas) await anular(v.id_venta, "Plazo de pago vencido");
   return vencidas.map((v) => v.codigo_venta);
 }
 

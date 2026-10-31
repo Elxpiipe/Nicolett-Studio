@@ -17,14 +17,23 @@ const PROMOS = [
 const destino = path.join(__dirname, "..", "uploads", "promociones");
 fs.mkdirSync(destino, { recursive: true });
 
-PROMOS.forEach((p, orden) => {
-  if (db.prepare(`SELECT 1 FROM promociones WHERE titulo = ?`).get(p.titulo)) {
-    console.log(`Ya existe la promoción "${p.titulo}", se omite.`);
-    return;
+async function main() {
+  for (const [orden, p] of PROMOS.entries()) {
+    if (await db.prepare(`SELECT 1 FROM promociones WHERE titulo = ?`).get(p.titulo)) {
+      console.log(`Ya existe la promoción "${p.titulo}", se omite.`);
+      continue;
+    }
+    const promo = await modelo.crear({ titulo: p.titulo, descripcion: p.descripcion, enlace: p.enlace, orden });
+    const archivo = `promo-${promo.id_promocion}-demo.jpg`;
+    fs.copyFileSync(path.join(__dirname, "demo", p.foto), path.join(destino, archivo));
+    await modelo.actualizarImagen(promo.id_promocion, `/uploads/promociones/${archivo}`);
+    console.log(`Promoción creada: ${p.titulo}`);
   }
-  const promo = modelo.crear({ titulo: p.titulo, descripcion: p.descripcion, enlace: p.enlace, orden });
-  const archivo = `promo-${promo.id_promocion}-demo.jpg`;
-  fs.copyFileSync(path.join(__dirname, "demo", p.foto), path.join(destino, archivo));
-  modelo.actualizarImagen(promo.id_promocion, `/uploads/promociones/${archivo}`);
-  console.log(`Promoción creada: ${p.titulo}`);
-});
+}
+
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(() => db.close());

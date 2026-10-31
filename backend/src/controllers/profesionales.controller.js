@@ -11,11 +11,11 @@ const { REGEX_HORA, aMinutos, normalizarFechaHora, ahoraChile } = require("../ut
 const DIAS = ["", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
 
 /** Arma la ficha completa de una profesional */
-function fichaCompleta(profesional) {
+async function fichaCompleta(profesional) {
   return {
     ...profesional,
-    servicios: profesionalModel.listarServicios(profesional.id_profesional),
-    horario: profesionalModel.listarHorario(profesional.id_profesional),
+    servicios: await profesionalModel.listarServicios(profesional.id_profesional),
+    horario: await profesionalModel.listarHorario(profesional.id_profesional),
   };
 }
 
@@ -23,8 +23,8 @@ function fichaCompleta(profesional) {
  * Carga la profesional de :id y verifica permisos.
  * Administrador: cualquiera. Profesional: solo la suya (si soloAdmin es false).
  */
-function cargarConPermiso(req, res, { soloAdmin = false } = {}) {
-  const profesional = profesionalModel.obtener(Number(req.params.id));
+async function cargarConPermiso(req, res, { soloAdmin = false } = {}) {
+  const profesional = await profesionalModel.obtener(Number(req.params.id));
   if (!profesional) {
     res.status(404).json({ error: "Profesional no encontrada" });
     return null;
@@ -42,19 +42,19 @@ function cargarConPermiso(req, res, { soloAdmin = false } = {}) {
  * GET /api/profesionales
  * Administrador: todas. Profesional: solo su propia ficha.
  */
-function listar(req, res) {
+async function listar(req, res) {
   if (req.usuario.rol === "Profesional") {
-    const propia = profesionalModel.obtenerPorUsuario(req.usuario.id_usuario);
-    return res.json({ datos: propia ? [fichaCompleta(propia)] : [] });
+    const propia = await profesionalModel.obtenerPorUsuario(req.usuario.id_usuario);
+    return res.json({ datos: propia ? [await fichaCompleta(propia)] : [] });
   }
-  return res.json({ datos: profesionalModel.listar().map(fichaCompleta) });
+  return res.json({ datos: await Promise.all((await profesionalModel.listar()).map(fichaCompleta)) });
 }
 
 /** GET /api/profesionales/:id */
-function obtener(req, res) {
-  const profesional = cargarConPermiso(req, res);
+async function obtener(req, res) {
+  const profesional = await cargarConPermiso(req, res);
   if (!profesional) return;
-  return res.json({ profesional: fichaCompleta(profesional) });
+  return res.json({ profesional: await fichaCompleta(profesional) });
 }
 
 /**
@@ -63,10 +63,10 @@ function obtener(req, res) {
  */
 async function crear(req, res) {
   const { nombres, apellidos, email, telefono, password, cargo, descripcion } = req.body;
-  if (usuarioModel.findByEmail(email)) {
+  if (await usuarioModel.findByEmail(email)) {
     return res.status(409).json({ error: "Ya existe una cuenta con ese correo" });
   }
-  const usuario = usuarioModel.crearUsuarioConPerfil({
+  const usuario = await usuarioModel.crearUsuarioConPerfil({
     id_rol: ROLES.PROFESIONAL.id_rol,
     nombres,
     apellidos,
@@ -75,11 +75,11 @@ async function crear(req, res) {
     password_hash: await hashPassword(password),
     descripcion,
   });
-  const creada = profesionalModel.obtenerPorUsuario(usuario.id_usuario);
+  const creada = await profesionalModel.obtenerPorUsuario(usuario.id_usuario);
   // Queda al final del equipo en "Nosotras" (el orden se puede cambiar despues)
-  const ultimoOrden = Math.max(0, ...profesionalModel.listar().map((p) => p.orden || 0));
-  profesionalModel.actualizarPerfil(creada.id_profesional, { cargo: cargo || null, orden: ultimoOrden + 1 });
-  return res.status(201).json({ profesional: fichaCompleta(profesionalModel.obtener(creada.id_profesional)) });
+  const ultimoOrden = Math.max(0, ...(await profesionalModel.listar()).map((p) => p.orden || 0));
+  await profesionalModel.actualizarPerfil(creada.id_profesional, { cargo: cargo || null, orden: ultimoOrden + 1 });
+  return res.status(201).json({ profesional: await fichaCompleta(await profesionalModel.obtener(creada.id_profesional)) });
 }
 
 /**
@@ -87,69 +87,75 @@ async function crear(req, res) {
  * { nombres, apellidos, cargo, descripcion, es_destacada, visible_sitio, orden,
  *   alias_calendario, google_calendar_id }
  */
-function actualizar(req, res) {
-  const profesional = cargarConPermiso(req, res, { soloAdmin: true });
+async function actualizar(req, res) {
+  const profesional = await cargarConPermiso(req, res, { soloAdmin: true });
   if (!profesional) return;
-  profesionalModel.actualizarPerfil(profesional.id_profesional, req.body);
+  await profesionalModel.actualizarPerfil(profesional.id_profesional, req.body);
   googleCalendar.invalidarCache(); // el alias o el calendario pudieron cambiar
-  return res.json({ profesional: fichaCompleta(profesionalModel.obtener(profesional.id_profesional)) });
+  return res.json({ profesional: await fichaCompleta(await profesionalModel.obtener(profesional.id_profesional)) });
 }
 
 /**
  * PUT /api/profesionales/:id/estado { activo } — solo Administrador.
  * Desactivada: no aparece en el sitio ni recibe reservas (su cuenta sigue existiendo).
  */
-function cambiarEstado(req, res) {
-  const profesional = cargarConPermiso(req, res, { soloAdmin: true });
+async function cambiarEstado(req, res) {
+  const profesional = await cargarConPermiso(req, res, { soloAdmin: true });
   if (!profesional) return;
-  const actualizada = profesionalModel.cambiarEstado(profesional.id_profesional, Boolean(req.body.activo));
+  const actualizada = await profesionalModel.cambiarEstado(profesional.id_profesional, Boolean(req.body.activo));
   googleCalendar.invalidarCache();
-  return res.json({ profesional: fichaCompleta(actualizada) });
+  return res.json({ profesional: await fichaCompleta(actualizada) });
 }
 
 /** POST /api/profesionales/:id/foto (multipart, campo "imagen") — solo Administrador */
-function subirFoto(req, res) {
-  const profesional = profesionalModel.obtener(Number(req.params.id));
+async function subirFoto(req, res) {
+  const profesional = await profesionalModel.obtener(Number(req.params.id));
   if (!profesional) {
     if (req.file) borrarImagenGuardada(urlArchivo("profesionales", req.file));
     return res.status(404).json({ error: "Profesional no encontrada" });
   }
   if (!req.file) return res.status(400).json({ error: "Debes adjuntar una imagen en el campo 'imagen'" });
-  const actualizada = profesionalModel.actualizarFoto(profesional.id_profesional, urlArchivo("profesionales", req.file));
+  const actualizada = await profesionalModel.actualizarFoto(profesional.id_profesional, urlArchivo("profesionales", req.file));
   borrarImagenGuardada(profesional.foto_url);
-  return res.json({ profesional: fichaCompleta(actualizada) });
+  return res.json({ profesional: await fichaCompleta(actualizada) });
 }
 
 /** DELETE /api/profesionales/:id/foto — vuelve a la imagen generica. Solo Administrador */
-function quitarFoto(req, res) {
-  const profesional = cargarConPermiso(req, res, { soloAdmin: true });
+async function quitarFoto(req, res) {
+  const profesional = await cargarConPermiso(req, res, { soloAdmin: true });
   if (!profesional) return;
-  const actualizada = profesionalModel.actualizarFoto(profesional.id_profesional, null);
+  const actualizada = await profesionalModel.actualizarFoto(profesional.id_profesional, null);
   borrarImagenGuardada(profesional.foto_url);
-  return res.json({ profesional: fichaCompleta(actualizada) });
+  return res.json({ profesional: await fichaCompleta(actualizada) });
 }
 
 /** PUT /api/profesionales/:id/servicios  { servicios: [id, ...] }  — solo Administrador */
-function asignarServicios(req, res) {
-  const profesional = cargarConPermiso(req, res, { soloAdmin: true });
+async function asignarServicios(req, res) {
+  const profesional = await cargarConPermiso(req, res, { soloAdmin: true });
   if (!profesional) return;
 
   const ids = [...new Set(req.body.servicios.map(Number))];
-  const inexistente = ids.find((id) => !servicioModel.obtener(id));
+  let inexistente;
+  for (const id of ids) {
+    if (!(await servicioModel.obtener(id))) {
+      inexistente = id;
+      break;
+    }
+  }
   if (inexistente) {
     return res.status(400).json({ error: `El servicio ${inexistente} no existe` });
   }
 
-  profesionalModel.reemplazarServicios(profesional.id_profesional, ids);
-  return res.json({ profesional: fichaCompleta(profesionalModel.obtener(profesional.id_profesional)) });
+  await profesionalModel.reemplazarServicios(profesional.id_profesional, ids);
+  return res.json({ profesional: await fichaCompleta(await profesionalModel.obtener(profesional.id_profesional)) });
 }
 
 /**
  * PUT /api/profesionales/:id/horario  { tramos: [{dia_semana, hora_inicio, hora_fin}] }
  * Reemplaza el horario semanal completo. Solo Administrador.
  */
-function guardarHorario(req, res) {
-  const profesional = cargarConPermiso(req, res, { soloAdmin: true });
+async function guardarHorario(req, res) {
+  const profesional = await cargarConPermiso(req, res, { soloAdmin: true });
   if (!profesional) return;
 
   const tramos = req.body.tramos.map((t) => ({
@@ -184,15 +190,15 @@ function guardarHorario(req, res) {
     }
   }
 
-  profesionalModel.reemplazarHorario(profesional.id_profesional, tramos);
-  return res.json({ profesional: fichaCompleta(profesionalModel.obtener(profesional.id_profesional)) });
+  await profesionalModel.reemplazarHorario(profesional.id_profesional, tramos);
+  return res.json({ profesional: await fichaCompleta(await profesionalModel.obtener(profesional.id_profesional)) });
 }
 
 /** GET /api/profesionales/:id/bloqueos — proximos bloqueos (Admin o la propia profesional) */
-function listarBloqueos(req, res) {
-  const profesional = cargarConPermiso(req, res);
+async function listarBloqueos(req, res) {
+  const profesional = await cargarConPermiso(req, res);
   if (!profesional) return;
-  const datos = profesionalModel.listarBloqueos(profesional.id_profesional, ahoraChile().texto);
+  const datos = await profesionalModel.listarBloqueos(profesional.id_profesional, ahoraChile().texto);
   return res.json({ datos });
 }
 
@@ -200,8 +206,8 @@ function listarBloqueos(req, res) {
  * POST /api/profesionales/:id/bloqueos  { fecha_hora_inicio, fecha_hora_fin, motivo }
  * Admin o la propia profesional. Avisa cuantas citas ya tomadas quedan dentro del bloqueo.
  */
-function crearBloqueo(req, res) {
-  const profesional = cargarConPermiso(req, res);
+async function crearBloqueo(req, res) {
+  const profesional = await cargarConPermiso(req, res);
   if (!profesional) return;
 
   const inicio = normalizarFechaHora(req.body.fecha_hora_inicio);
@@ -216,8 +222,8 @@ function crearBloqueo(req, res) {
     return res.status(400).json({ error: "El bloqueo ya terminó: elige una fecha futura" });
   }
 
-  const citasAfectadas = profesionalModel.citasQueTocan(profesional.id_profesional, inicio, fin).length;
-  const bloqueo = profesionalModel.crearBloqueo({
+  const citasAfectadas = (await profesionalModel.citasQueTocan(profesional.id_profesional, inicio, fin)).length;
+  const bloqueo = await profesionalModel.crearBloqueo({
     id_profesional: profesional.id_profesional,
     fecha_hora_inicio: inicio,
     fecha_hora_fin: fin,
@@ -227,14 +233,14 @@ function crearBloqueo(req, res) {
 }
 
 /** DELETE /api/profesionales/:id/bloqueos/:idBloqueo */
-function eliminarBloqueo(req, res) {
-  const profesional = cargarConPermiso(req, res);
+async function eliminarBloqueo(req, res) {
+  const profesional = await cargarConPermiso(req, res);
   if (!profesional) return;
-  const bloqueo = profesionalModel.obtenerBloqueo(Number(req.params.idBloqueo));
+  const bloqueo = await profesionalModel.obtenerBloqueo(Number(req.params.idBloqueo));
   if (!bloqueo || bloqueo.id_profesional !== profesional.id_profesional) {
     return res.status(404).json({ error: "Bloqueo no encontrado" });
   }
-  profesionalModel.eliminarBloqueo(bloqueo.id_bloqueo);
+  await profesionalModel.eliminarBloqueo(bloqueo.id_bloqueo);
   return res.json({ mensaje: "Bloqueo eliminado" });
 }
 
@@ -242,15 +248,15 @@ function eliminarBloqueo(req, res) {
  * POST /api/profesionales/yo — la Administradora que tambien atiende clientas crea
  * su perfil de profesional con SU MISMA cuenta (aparece en "Nosotras" y recibe reservas).
  */
-function crearPerfilPropio(req, res) {
-  const ya = profesionalModel.obtenerPorUsuario(req.usuario.id_usuario);
-  if (ya) return res.json({ profesional: fichaCompleta(ya) });
-  const creada = profesionalModel.crearParaUsuario(req.usuario.id_usuario, {
+async function crearPerfilPropio(req, res) {
+  const ya = await profesionalModel.obtenerPorUsuario(req.usuario.id_usuario);
+  if (ya) return res.json({ profesional: await fichaCompleta(ya) });
+  const creada = await profesionalModel.crearParaUsuario(req.usuario.id_usuario, {
     cargo: req.body.cargo || "Fundadora",
     descripcion: req.body.descripcion,
   });
   // Al crearse, queda al final del equipo; la duena se puede marcar "destacada"
-  return res.status(201).json({ profesional: fichaCompleta(creada) });
+  return res.status(201).json({ profesional: await fichaCompleta(creada) });
 }
 
 /**
@@ -258,20 +264,20 @@ function crearPerfilPropio(req, res) {
  * Una sola cuenta con los dos roles: la profesional puede administrar el sistema.
  * No se puede quitar el acceso a una misma ni dejar el sistema sin administradoras.
  */
-function cambiarAccesoAdmin(req, res) {
-  const profesional = cargarConPermiso(req, res, { soloAdmin: true });
+async function cambiarAccesoAdmin(req, res) {
+  const profesional = await cargarConPermiso(req, res, { soloAdmin: true });
   if (!profesional) return;
   const darAcceso = Boolean(req.body.es_administradora);
   if (!darAcceso) {
     if (profesional.id_usuario === req.usuario.id_usuario) {
       return res.status(409).json({ error: "No puedes quitarte a ti misma el acceso de administradora." });
     }
-    if (profesional.es_administradora && profesionalModel.contarAdministradorasActivas() <= 1) {
+    if (profesional.es_administradora && await profesionalModel.contarAdministradorasActivas() <= 1) {
       return res.status(409).json({ error: "El sistema debe tener al menos una administradora." });
     }
   }
-  profesionalModel.cambiarRolUsuario(profesional.id_usuario, darAcceso);
-  return res.json({ profesional: fichaCompleta(profesionalModel.obtener(profesional.id_profesional)) });
+  await profesionalModel.cambiarRolUsuario(profesional.id_usuario, darAcceso);
+  return res.json({ profesional: await fichaCompleta(await profesionalModel.obtener(profesional.id_profesional)) });
 }
 
 module.exports = {

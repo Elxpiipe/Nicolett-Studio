@@ -2,6 +2,7 @@
 // Correos automaticos a la clienta: reserva confirmada, hora apartada (transferencia),
 // cambio de hora, cancelacion y compra pagada. Se envian en segundo plano: si el
 // correo falla, la reserva o la compra NO se ven afectadas.
+const db = require("../../db/connection");
 const citaModel = require("../models/cita.model");
 const ventaModel = require("../models/venta.model");
 const { reglasAgenda } = require("../models/configuracion.model");
@@ -51,7 +52,7 @@ function plantilla({ titulo, intro, filas = [], bloques = [], boton }) {
       <p style="margin:0 0 18px;font-size:15px;color:#4b3a2b;text-align:center;">${intro}</p>
       <table style="width:100%;border-collapse:collapse;">${tabla}</table>
       ${extras}
-      ${boton ? `<p style="text-align:center;margin:24px 0 4px;"><a href="${boton.url}" style="background:#4b3a2b;color:#fcf9f4;padding:12px 24px;border-radius:999px;text-decoration:none;font-size:14px;">${esc(boton.texto)}</a></p>` : ""}
+      ${boton ? `<p style="text-align:center;margin:24px 0 4px;"><a href="${boton.url}" style="background:#4b3a2b;color:#fcf9f4;padding:12px 24px;border-radius:999px;text-decoration:none;font-size:14px;">${esc(boton.texto)}</a></p>${boton.nota ? `<p style="text-align:center;margin:6px 0 0;color:#8a7a6a;font-size:12px;">${esc(boton.nota)}</p>` : ""}` : ""}
       <p style="margin:26px 0 0;text-align:center;font-size:12px;color:#6b5b4b;">
         ${esc(DIRECCION)} · WhatsApp ${esc(WHATSAPP)} · @nicolettstudiofantasy<br/>
         <span style="letter-spacing:3px;">CUIDA TU BELLEZA, SIEMPRE &#9825;</span>
@@ -84,8 +85,8 @@ function filasCita(c) {
   ];
 }
 
-function bloquesCita(c) {
-  const { horasCambio } = reglasAgenda();
+async function bloquesCita(c) {
+  const { horasCambio } = await reglasAgenda();
   return [
     { titulo: "Antes de tu cita", lineas: (c.indicaciones || "").split("\n").map((l) => l.trim()).filter(Boolean) },
     {
@@ -93,11 +94,26 @@ function bloquesCita(c) {
       fondo: "#f5eee4",
       lineas: [
         "El abono se descuenta del total del servicio.",
-        `Cambio de hora solo con ${horasCambio} horas de anticipación, desde "Mis citas".`,
+        `Cambio de hora solo con ${horasCambio} horas de anticipación, desde "Mis citas" en tu cuenta o por WhatsApp.`,
         "Si no cumples el plazo o no asistes, se pierde el abono.",
       ],
     },
   ];
+}
+
+/** Las invitadas (sin cuenta) reciben una invitacion a crear su cuenta en vez de "Mis citas" */
+async function esInvitada(email) {
+  // email es CITEXT: compara sin distinguir mayusculas (antes COLLATE NOCASE)
+  return Boolean((await db.prepare(`SELECT es_invitado FROM usuarios WHERE email = ?`).get(email))?.es_invitado);
+}
+
+async function botonCuenta(email, normal) {
+  if (!(await esInvitada(email))) return normal;
+  return {
+    texto: "Crear mi cuenta",
+    url: `${urlSitio()}/registro?email=${encodeURIComponent(email)}`,
+    nota: "Con tu cuenta puedes ver tus citas y pedidos, y cambiar tu hora tú misma.",
+  };
 }
 
 async function enviar(datos, destinatario) {
@@ -106,7 +122,7 @@ async function enviar(datos, destinatario) {
 
 const NOTIFICACIONES = {
   async reservaConfirmada(codigo) {
-    const c = citaModel.obtenerPorCodigo(codigo);
+    const c = await citaModel.obtenerPorCodigo(codigo);
     if (!c) return;
     return enviar(
       {
@@ -114,15 +130,15 @@ const NOTIFICACIONES = {
         titulo: "¡Tu hora está confirmada!",
         intro: `Hola ${esc(c.cliente.split(" ")[0])}, recibimos tu abono. Te esperamos.`,
         filas: filasCita(c),
-        bloques: bloquesCita(c),
-        boton: { texto: "Ver mis citas", url: `${urlSitio()}/panel/mis-citas` },
+        bloques: await bloquesCita(c),
+        boton: await botonCuenta(c.email_cliente, { texto: "Ver mis citas", url: `${urlSitio()}/panel/mis-citas` }),
       },
       c.email_cliente
     );
   },
 
   async reservaApartada(codigo) {
-    const c = citaModel.obtenerPorCodigo(codigo);
+    const c = await citaModel.obtenerPorCodigo(codigo);
     if (!c) return;
     const mensaje = encodeURIComponent(`Hola, quiero pagar el abono de mi reserva ${c.codigo_cita} por transferencia.`);
     return enviar(
@@ -131,7 +147,7 @@ const NOTIFICACIONES = {
         titulo: "Tu hora está apartada",
         intro: `Hola ${esc(c.cliente.split(" ")[0])}, te guardamos la hora hasta las <b>${esc(c.fecha_expiracion_abono?.slice(11, 16))}</b>. Escríbenos por WhatsApp para pagar el abono por transferencia; si no llega a tiempo, la hora se libera.`,
         filas: filasCita(c),
-        bloques: bloquesCita(c),
+        bloques: await bloquesCita(c),
         boton: { texto: "Coordinar por WhatsApp", url: `https://wa.me/56940322551?text=${mensaje}` },
       },
       c.email_cliente
@@ -139,7 +155,7 @@ const NOTIFICACIONES = {
   },
 
   async citaReagendada(codigo) {
-    const c = citaModel.obtenerPorCodigo(codigo);
+    const c = await citaModel.obtenerPorCodigo(codigo);
     if (!c) return;
     return enviar(
       {
@@ -147,15 +163,15 @@ const NOTIFICACIONES = {
         titulo: "Tu nueva hora",
         intro: `Hola ${esc(c.cliente.split(" ")[0])}, tu cita quedó para el <b>${esc(fechaLarga(c.fecha_hora_inicio))}</b>. Tu abono se mantiene.`,
         filas: filasCita(c),
-        bloques: bloquesCita(c),
-        boton: { texto: "Ver mis citas", url: `${urlSitio()}/panel/mis-citas` },
+        bloques: await bloquesCita(c),
+        boton: await botonCuenta(c.email_cliente, { texto: "Ver mis citas", url: `${urlSitio()}/panel/mis-citas` }),
       },
       c.email_cliente
     );
   },
 
   async citaCancelada(codigo) {
-    const c = citaModel.obtenerPorCodigo(codigo);
+    const c = await citaModel.obtenerPorCodigo(codigo);
     if (!c) return;
     return enviar(
       {
@@ -172,7 +188,7 @@ const NOTIFICACIONES = {
   },
 
   async compraPagada(codigo) {
-    const v = ventaModel.obtenerPorCodigo(codigo);
+    const v = await ventaModel.obtenerPorCodigo(codigo);
     if (!v) return;
     return enviar(
       {
@@ -184,7 +200,7 @@ const NOTIFICACIONES = {
           ["Total pagado", formatearPrecio(v.total), true],
           ["Retiro", DIRECCION],
         ],
-        boton: { texto: "Ver mis pedidos", url: `${urlSitio()}/panel/mis-pedidos` },
+        boton: await botonCuenta(v.email_cliente, { texto: "Ver mis pedidos", url: `${urlSitio()}/panel/mis-pedidos` }),
       },
       v.email_cliente
     );
@@ -193,7 +209,8 @@ const NOTIFICACIONES = {
 
 /** Dispara un correo sin esperar ni bloquear la respuesta */
 function notificar(tipo, codigo) {
-  setImmediate(() =>
+  // Fuera de cualquier transaccion: el correo se arma con lo ya guardado
+  db.enSegundoPlano(() =>
     NOTIFICACIONES[tipo](codigo).catch((err) => console.warn(`Notificación ${tipo} (${codigo}) falló: ${err.message}`))
   );
 }

@@ -10,9 +10,9 @@ async function estadoGoogle(req, res) {
 
 /** PUT /api/integraciones/google { modo, calendarioCompartido } */
 async function guardarGoogle(req, res) {
-  configuracion.guardarValor("GOOGLE_CAL_MODO", req.body.modo);
+  await configuracion.guardarValor("GOOGLE_CAL_MODO", req.body.modo);
   if (req.body.calendarioCompartido !== undefined) {
-    configuracion.guardarValor("GOOGLE_CAL_ID", (req.body.calendarioCompartido || "").trim());
+    await configuracion.guardarValor("GOOGLE_CAL_ID", (req.body.calendarioCompartido || "").trim());
   }
   googleCalendar.invalidarCache();
   return res.json(await googleCalendar.estado());

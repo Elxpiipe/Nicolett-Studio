@@ -24,28 +24,38 @@ const PRODUCTOS = [
   { nombre: "Protector térmico en spray 200 ml", linea: "Cuidado diario", descripcion: "Protege el cabello del calor de secador y plancha.", precio: 8990, stock: 1 },
 ];
 
-let creados = 0;
-const idAdmin = db.prepare(`SELECT id_usuario FROM usuarios WHERE id_rol = 1 ORDER BY id_usuario LIMIT 1`).get()?.id_usuario;
-if (!idAdmin) {
-  console.error("Primero crea un Administrador (npm run crear-admin o npm run demo).");
-  process.exit(1);
+async function main() {
+  let creados = 0;
+  const idAdmin = (await db.prepare(`SELECT id_usuario FROM usuarios WHERE id_rol = 1 ORDER BY id_usuario LIMIT 1`).get())?.id_usuario;
+  if (!idAdmin) {
+    console.error("Primero crea un Administrador (npm run crear-admin o npm run demo).");
+    process.exitCode = 1;
+    return;
+  }
+
+  for (const p of PRODUCTOS) {
+    if (await productoModel.buscarPorNombre(p.nombre)) {
+      console.log(`Ya existe "${p.nombre}", se omite.`);
+      continue;
+    }
+    const id = await productoModel.crear({ ...p, descripcion: `${p.descripcion} (Producto y precio de ejemplo)` });
+    await productoModel.fijarStock(id, p.stock, idAdmin, "Stock inicial (demo)");
+    if (p.foto) {
+      const destino = path.join(__dirname, "..", "uploads", "productos");
+      fs.mkdirSync(destino, { recursive: true });
+      const archivo = `producto-${id}-demo.jpg`;
+      fs.copyFileSync(path.join(__dirname, "demo", p.foto), path.join(destino, archivo));
+      await productoModel.actualizarImagen(id, `/uploads/productos/${archivo}`);
+    }
+    creados++;
+    console.log(`Creado: ${p.nombre} — $${p.precio} (stock ${p.stock})`);
+  }
+  console.log(`\nListo: ${creados} producto(s) de ejemplo. Edita precios, fotos y stock en /tienda.`);
 }
 
-for (const p of PRODUCTOS) {
-  if (productoModel.buscarPorNombre(p.nombre)) {
-    console.log(`Ya existe "${p.nombre}", se omite.`);
-    continue;
-  }
-  const id = productoModel.crear({ ...p, descripcion: `${p.descripcion} (Producto y precio de ejemplo)` });
-  productoModel.fijarStock(id, p.stock, idAdmin, "Stock inicial (demo)");
-  if (p.foto) {
-    const destino = path.join(__dirname, "..", "uploads", "productos");
-    fs.mkdirSync(destino, { recursive: true });
-    const archivo = `producto-${id}-demo.jpg`;
-    fs.copyFileSync(path.join(__dirname, "demo", p.foto), path.join(destino, archivo));
-    productoModel.actualizarImagen(id, `/uploads/productos/${archivo}`);
-  }
-  creados++;
-  console.log(`Creado: ${p.nombre} — $${p.precio} (stock ${p.stock})`);
-}
-console.log(`\nListo: ${creados} producto(s) de ejemplo. Edita precios, fotos y stock en /tienda.`);
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(() => db.close());

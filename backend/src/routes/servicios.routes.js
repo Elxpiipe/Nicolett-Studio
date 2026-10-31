@@ -9,21 +9,22 @@ const {
   validarIdServicioParam,
   validarListadoServicios,
 } = require("../utils/validators");
+const asincrono = require("../utils/asincrono");
 
 const router = Router();
 
 // Publicas: el catalogo se puede navegar sin loguearse
-router.get("/", validarListadoServicios, serviciosController.listar);
-router.get("/:id", validarIdServicioParam, serviciosController.obtener);
+router.get("/", validarListadoServicios, asincrono(serviciosController.listar));
+router.get("/:id", validarIdServicioParam, asincrono(serviciosController.obtener));
 
 // Desde aqui, solo Administrador
 router.use(requiereAutenticacion, requiereRol("Administrador"));
 
-router.post("/", validarCrearServicio, serviciosController.crear);
-router.put("/:id", validarIdServicioParam, validarActualizarServicio, serviciosController.actualizar);
-router.delete("/:id", validarIdServicioParam, serviciosController.eliminar);
-router.put("/:id/reactivar", validarIdServicioParam, serviciosController.reactivar);
-router.post("/:id/imagen", validarIdServicioParam, manejarSubidaImagen, serviciosController.subirImagen);
-router.delete("/:id/imagen", validarIdServicioParam, serviciosController.quitarImagen);
+router.post("/", validarCrearServicio, asincrono(serviciosController.crear));
+router.put("/:id", validarIdServicioParam, validarActualizarServicio, asincrono(serviciosController.actualizar));
+router.delete("/:id", validarIdServicioParam, asincrono(serviciosController.eliminar));
+router.put("/:id/reactivar", validarIdServicioParam, asincrono(serviciosController.reactivar));
+router.post("/:id/imagen", validarIdServicioParam, manejarSubidaImagen, asincrono(serviciosController.subirImagen));
+router.delete("/:id/imagen", validarIdServicioParam, asincrono(serviciosController.quitarImagen));
 
 module.exports = router;

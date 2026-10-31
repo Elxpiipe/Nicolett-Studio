@@ -8,22 +8,23 @@ const {
   validarIdUsuarioParam,
   validarListadoUsuarios,
 } = require("../utils/validators");
+const asincrono = require("../utils/asincrono");
 
 const router = Router();
 
 // Todas las rutas de este archivo requieren estar autenticado Y ser Administrador
 router.use(requiereAutenticacion, requiereRol("Administrador"));
 
-router.get("/", validarListadoUsuarios, usuariosController.listar);
-router.get("/:id", validarIdUsuarioParam, usuariosController.obtener);
-router.post("/", validarCrearUsuarioAdmin, usuariosController.crear);
+router.get("/", validarListadoUsuarios, asincrono(usuariosController.listar));
+router.get("/:id", validarIdUsuarioParam, asincrono(usuariosController.obtener));
+router.post("/", validarCrearUsuarioAdmin, asincrono(usuariosController.crear));
 router.put(
   "/:id",
   validarIdUsuarioParam,
   validarActualizarUsuarioAdmin,
-  usuariosController.actualizar
+  asincrono(usuariosController.actualizar)
 );
-router.delete("/:id", validarIdUsuarioParam, usuariosController.eliminar);
-router.put("/:id/reactivar", validarIdUsuarioParam, usuariosController.reactivar);
+router.delete("/:id", validarIdUsuarioParam, asincrono(usuariosController.eliminar));
+router.put("/:id/reactivar", validarIdUsuarioParam, asincrono(usuariosController.reactivar));
 
 module.exports = router;

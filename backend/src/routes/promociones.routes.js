@@ -6,6 +6,7 @@ const { requiereAutenticacion, requiereRol } = require("../middleware/auth.middl
 const { crearSubida, urlArchivo, borrarImagenGuardada } = require("../middleware/upload.middleware");
 const { manejarErrores } = require("./tienda.routes");
 const { ahoraChile } = require("../utils/fechas");
+const asincrono = require("../utils/asincrono");
 
 const router = Router();
 const soloAdmin = [requiereAutenticacion, requiereRol("Administrador")];
@@ -33,36 +34,36 @@ const campos = (crear) => [
 ];
 
 /** Publico: promociones vigentes hoy, para el carrusel del Inicio */
-router.get("/", (req, res) => res.json({ datos: modelo.listarVigentes(ahoraChile().fecha) }));
+router.get("/", asincrono(async (req, res) => res.json({ datos: await modelo.listarVigentes(ahoraChile().fecha) })));
 
 /** Administradora: todas (incluye futuras, vencidas y ocultas) */
-router.get("/admin", ...soloAdmin, (req, res) => res.json({ datos: modelo.listarTodas(), hoy: ahoraChile().fecha }));
+router.get("/admin", ...soloAdmin, asincrono(async (req, res) => res.json({ datos: await modelo.listarTodas(), hoy: ahoraChile().fecha })));
 
-router.post("/", ...soloAdmin, ...campos(true), (req, res) => res.status(201).json({ promocion: modelo.crear(req.body) }));
+router.post("/", ...soloAdmin, ...campos(true), asincrono(async (req, res) => res.status(201).json({ promocion: await modelo.crear(req.body) })));
 
-router.put("/:id", ...soloAdmin, ...idParam, ...campos(false), (req, res) => {
-  if (!modelo.obtener(Number(req.params.id))) return res.status(404).json({ error: "Promoción no encontrada" });
-  return res.json({ promocion: modelo.actualizar(Number(req.params.id), req.body) });
-});
+router.put("/:id", ...soloAdmin, ...idParam, ...campos(false), asincrono(async (req, res) => {
+  if (!(await modelo.obtener(Number(req.params.id)))) return res.status(404).json({ error: "Promoción no encontrada" });
+  return res.json({ promocion: await modelo.actualizar(Number(req.params.id), req.body) });
+}));
 
-router.delete("/:id", ...soloAdmin, ...idParam, (req, res) => {
-  const promo = modelo.obtener(Number(req.params.id));
+router.delete("/:id", ...soloAdmin, ...idParam, asincrono(async (req, res) => {
+  const promo = await modelo.obtener(Number(req.params.id));
   if (!promo) return res.status(404).json({ error: "Promoción no encontrada" });
-  modelo.eliminar(promo.id_promocion);
+  await modelo.eliminar(promo.id_promocion);
   borrarImagenGuardada(promo.imagen_url);
   return res.json({ mensaje: "Promoción eliminada" });
-});
+}));
 
-router.post("/:id/imagen", ...soloAdmin, ...idParam, crearSubida("promociones", "promo"), (req, res) => {
-  const promo = modelo.obtener(Number(req.params.id));
+router.post("/:id/imagen", ...soloAdmin, ...idParam, crearSubida("promociones", "promo"), asincrono(async (req, res) => {
+  const promo = await modelo.obtener(Number(req.params.id));
   if (!promo) {
     if (req.file) borrarImagenGuardada(urlArchivo("promociones", req.file));
     return res.status(404).json({ error: "Promoción no encontrada" });
   }
   if (!req.file) return res.status(400).json({ error: "Debes adjuntar una imagen" });
-  const actualizada = modelo.actualizarImagen(promo.id_promocion, urlArchivo("promociones", req.file));
+  const actualizada = await modelo.actualizarImagen(promo.id_promocion, urlArchivo("promociones", req.file));
   borrarImagenGuardada(promo.imagen_url);
   return res.json({ promocion: actualizada });
-});
+}));
 
 module.exports = router;

@@ -1,6 +1,7 @@
 // src/context/AuthContext.jsx
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { api } from "../api/client";
+import { borrarInvitada } from "../utils/invitada";
 
 const AuthContext = createContext(null);
 
@@ -45,6 +46,7 @@ export function AuthProvider({ children }) {
   const iniciarSesion = useCallback(
     async ({ email, password }) => {
       const res = await api.login({ email, password });
+      borrarInvitada();
       guardarSesion(res.usuario, res.token);
       return res.usuario;
     },
@@ -54,6 +56,10 @@ export function AuthProvider({ children }) {
   const registrarse = useCallback(
     async (payload) => {
       const res = await api.registro(payload);
+      // Correo usado antes sin cuenta: el backend envia un enlace para activar la
+      // cuenta (y asi conservar sus reservas). No se abre sesion todavia.
+      if (res.activacion) return res;
+      borrarInvitada();
       guardarSesion(res.usuario, res.token);
       return res.usuario;
     },

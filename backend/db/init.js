@@ -1,32 +1,29 @@
 // db/init.js
-// Crea (o recrea) la base de datos SQLite a partir de schema.sql
+// Crea (o completa) las tablas en PostgreSQL a partir de schema.postgres.sql.
+// No borra tablas ni datos: se puede ejecutar todas las veces que se quiera.
 // Uso: npm run db:init
 
 require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
-const Database = require("better-sqlite3");
-const { aplicarMigraciones } = require("./migraciones");
+const db = require("./connection");
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, "nicolett.db");
-const SCHEMA_PATH = path.join(__dirname, "schema.sql");
+const SCHEMA_PATH = path.join(__dirname, "schema.postgres.sql");
 
-if (!fs.existsSync(SCHEMA_PATH)) {
-  console.error("No se encontro schema.sql en", SCHEMA_PATH);
-  process.exit(1);
+async function main() {
+  if (!fs.existsSync(SCHEMA_PATH)) {
+    throw new Error(`No se encontro schema.postgres.sql en ${SCHEMA_PATH}`);
+  }
+  const schema = fs.readFileSync(SCHEMA_PATH, "utf8");
+  console.log("Aplicando schema.postgres.sql en", process.env.DATABASE_URL.replace(/:[^:@/]*@/, ":****@"), "...");
+  // Sin los avisos "ya existe" de las tablas que ya estaban creadas
+  await db.exec(`SET client_min_messages TO warning;\n${schema}`);
+  console.log("Base de datos inicializada correctamente.");
 }
 
-const schema = fs.readFileSync(SCHEMA_PATH, "utf8");
-
-const db = new Database(DB_PATH);
-db.pragma("foreign_keys = ON");
-
-console.log("Aplicando schema.sql sobre", DB_PATH, "...");
-db.exec(schema);
-
-console.log("Aplicando migraciones (cambios adicionales) ...");
-aplicarMigraciones(db);
-
-console.log("Base de datos inicializada correctamente.");
-
-db.close();
+main()
+  .catch((err) => {
+    console.error("No se pudo inicializar la base de datos:", err.message);
+    process.exitCode = 1;
+  })
+  .finally(() => db.close());

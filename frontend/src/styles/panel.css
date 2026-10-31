@@ -1,5 +1,5 @@
 .panel-cuerpo {
-  max-width: 980px;
+  max-width: var(--ancho-pagina);
   width: 100%;
   margin: 0 auto;
   padding: 40px clamp(14px, 4vw, 24px) 10px;

@@ -67,6 +67,19 @@ const validarCrearUsuarioAdmin = [
   manejarErroresValidacion,
 ];
 
+// Datos minimos para reservar o comprar sin cuenta
+const validarInvitada = [
+  body("nombres").trim().notEmpty().withMessage("Escribe tu nombre").isLength({ max: 60 }),
+  body("apellidos").trim().notEmpty().withMessage("Escribe tu apellido").isLength({ max: 60 }),
+  body("email").trim().isEmail().withMessage("Correo inválido").normalizeEmail(),
+  body("telefono")
+    .trim()
+    .customSanitizer((v) => String(v || "").replace(/[\s-]/g, ""))
+    .matches(/^\+?\d{8,12}$/)
+    .withMessage("Escribe un teléfono válido, por ejemplo +56912345678"),
+  manejarErroresValidacion,
+];
+
 const validarOlvidePassword = [
   body("email").trim().isEmail().withMessage("Email invalido").normalizeEmail(),
   manejarErroresValidacion,
@@ -267,6 +280,7 @@ const validarConfigGoogle = [
 ];
 
 module.exports = {
+  validarInvitada,
   validarCrearProfesional,
   validarPerfilProfesional,
   validarEstadoProfesional,

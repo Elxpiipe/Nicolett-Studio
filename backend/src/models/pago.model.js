@@ -3,16 +3,16 @@
 const db = require("../../db/connection");
 
 /** Guarda el token de Webpay en el pago y extiende el plazo de la cita mientras paga */
-const registrarInicioWebpay = db.transaction((id_pago, id_cita, token, fecha_expiracion_abono) => {
-  db.prepare(
+const registrarInicioWebpay = db.transaction(async (id_pago, id_cita, token, fecha_expiracion_abono) => {
+  await db.prepare(
     `UPDATE pagos SET id_transaccion_externa = ?, estado = 'PENDIENTE', detalle_pasarela = NULL
      WHERE id_pago = ?`
   ).run(token, id_pago);
-  db.prepare(`UPDATE citas SET fecha_expiracion_abono = ? WHERE id_cita = ?`).run(fecha_expiracion_abono, id_cita);
+  await db.prepare(`UPDATE citas SET fecha_expiracion_abono = ? WHERE id_cita = ?`).run(fecha_expiracion_abono, id_cita);
 });
 
 /** Pago por token de Webpay. Sirve para abonos (cita) y compras de la tienda (venta). */
-function obtenerPorToken(token) {
+async function obtenerPorToken(token) {
   return db
     .prepare(
       `SELECT pg.*, c.codigo_cita, c.estado AS estado_cita, v.codigo_venta, v.estado AS estado_venta
@@ -25,8 +25,8 @@ function obtenerPorToken(token) {
 }
 
 /** Guarda el token de Webpay de una compra de la tienda */
-function registrarInicioWebpayVenta(id_pago, token) {
-  db.prepare(
+async function registrarInicioWebpayVenta(id_pago, token) {
+  await db.prepare(
     `UPDATE pagos SET id_transaccion_externa = ?, estado = 'PENDIENTE', detalle_pasarela = NULL WHERE id_pago = ?`
   ).run(token, id_pago);
 }
@@ -36,12 +36,12 @@ function registrarInicioWebpayVenta(id_pago, token) {
  * Si la cita alcanzo a cancelarse por plazo vencido, se reactiva (quien llama
  * ya verifico que la hora sigue libre).
  */
-const aprobarAbono = db.transaction((id_pago, id_cita, detalle) => {
-  db.prepare(
-    `UPDATE pagos SET estado = 'APROBADO', detalle_pasarela = ?, fecha_pago = CURRENT_TIMESTAMP
+const aprobarAbono = db.transaction(async (id_pago, id_cita, detalle) => {
+  await db.prepare(
+    `UPDATE pagos SET estado = 'APROBADO', detalle_pasarela = ?, fecha_pago = fecha_actual_utc()
      WHERE id_pago = ?`
   ).run(JSON.stringify(detalle), id_pago);
-  db.prepare(
+  await db.prepare(
     `UPDATE citas SET estado = 'CONFIRMADA', fecha_expiracion_abono = NULL,
        fecha_cancelacion = NULL, motivo_cancelacion = NULL
      WHERE id_cita = ?`
@@ -53,21 +53,21 @@ const aprobarAbono = db.transaction((id_pago, id_cita, detalle) => {
  * clienta tomo la hora. El pago queda APROBADO (el dinero se cobro) y la cita
  * CANCELADA con un motivo claro, para que la administracion reagende o devuelva.
  */
-const registrarAbonoFueraDePlazo = db.transaction((id_pago, id_cita, detalle) => {
-  db.prepare(
-    `UPDATE pagos SET estado = 'APROBADO', detalle_pasarela = ?, fecha_pago = CURRENT_TIMESTAMP
+const registrarAbonoFueraDePlazo = db.transaction(async (id_pago, id_cita, detalle) => {
+  await db.prepare(
+    `UPDATE pagos SET estado = 'APROBADO', detalle_pasarela = ?, fecha_pago = fecha_actual_utc()
      WHERE id_pago = ?`
   ).run(JSON.stringify(detalle), id_pago);
-  db.prepare(
-    `UPDATE citas SET estado = 'CANCELADA', fecha_cancelacion = CURRENT_TIMESTAMP,
+  await db.prepare(
+    `UPDATE citas SET estado = 'CANCELADA', fecha_cancelacion = fecha_actual_utc(),
        motivo_cancelacion = 'Abono pagado fuera de plazo y la hora ya estaba tomada: reagendar o devolver'
      WHERE id_cita = ?`
   ).run(id_cita);
 });
 
 /** Pago rechazado por el banco: la cita sigue pendiente hasta que venza su plazo */
-function rechazarPago(id_pago, detalle) {
-  db.prepare(`UPDATE pagos SET estado = 'RECHAZADO', detalle_pasarela = ? WHERE id_pago = ?`).run(
+async function rechazarPago(id_pago, detalle) {
+  await db.prepare(`UPDATE pagos SET estado = 'RECHAZADO', detalle_pasarela = ? WHERE id_pago = ?`).run(
     JSON.stringify(detalle),
     id_pago
   );

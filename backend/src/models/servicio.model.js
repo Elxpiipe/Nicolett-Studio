@@ -8,13 +8,13 @@ const CAMPOS_SERVICIO = `
 `;
 
 /** Variantes (S/M/L/XL...) de varios servicios, agrupadas por servicio */
-function variantesDe(ids, { soloActivas = true } = {}) {
+async function variantesDe(ids, { soloActivas = true } = {}) {
   if (!ids.length) return new Map();
-  const filas = db
+  const filas = await db
     .prepare(
       `SELECT id_variante, id_servicio, nombre, detalle, precio, orden, activo FROM servicio_variantes
        WHERE id_servicio IN (${ids.map(() => "?").join(",")}) ${soloActivas ? "AND activo = 1" : ""}
-       ORDER BY orden, precio`
+       ORDER BY orden, precio, id_variante`
     )
     .all(...ids);
   const mapa = new Map();
@@ -26,8 +26,8 @@ function variantesDe(ids, { soloActivas = true } = {}) {
 }
 
 /** Agrega variantes y el "precio desde" a cada servicio */
-function conVariantes(servicios) {
-  const mapa = variantesDe(servicios.map((s) => s.id_servicio));
+async function conVariantes(servicios) {
+  const mapa = await variantesDe(servicios.map((s) => s.id_servicio));
   return servicios.map((s) => {
     const variantes = mapa.get(s.id_servicio) || [];
     return {
@@ -41,7 +41,7 @@ function conVariantes(servicios) {
   });
 }
 
-function listar({ id_categoria, soloActivos, busqueda } = {}) {
+async function listar({ id_categoria, soloActivos, busqueda } = {}) {
   const condiciones = [];
   const params = {};
 
@@ -53,7 +53,7 @@ function listar({ id_categoria, soloActivos, busqueda } = {}) {
     condiciones.push("s.activo = 1");
   }
   if (busqueda) {
-    condiciones.push("s.nombre LIKE @busqueda");
+    condiciones.push("s.nombre ILIKE @busqueda"); // ILIKE: igual que LIKE de SQLite (sin mayusculas)
     params.busqueda = `%${busqueda}%`;
   }
 
@@ -66,13 +66,13 @@ function listar({ id_categoria, soloActivos, busqueda } = {}) {
       FROM servicios s
       JOIN categorias_servicio c ON c.id_categoria = s.id_categoria
       ${whereClause}
-      ORDER BY c.orden ASC, c.nombre ASC, s.orden ASC, s.precio ASC, s.nombre ASC
+      ORDER BY c.orden ASC, c.nombre ASC, s.orden ASC, s.precio ASC, s.nombre ASC, s.id_servicio ASC
     `
     )
     .all(params);
 }
 
-function obtenerBase(id_servicio) {
+async function obtenerBase(id_servicio) {
   return db
     .prepare(
       `
@@ -85,12 +85,12 @@ function obtenerBase(id_servicio) {
     .get(id_servicio);
 }
 
-function obtener(id_servicio) {
-  const s = obtenerBase(id_servicio);
-  return s ? conVariantes([s])[0] : undefined;
+async function obtener(id_servicio) {
+  const s = await obtenerBase(id_servicio);
+  return s ? (await conVariantes([s]))[0] : undefined;
 }
 
-function obtenerVariante(id_variante) {
+async function obtenerVariante(id_variante) {
   return db.prepare(`SELECT * FROM servicio_variantes WHERE id_variante = ?`).get(id_variante);
 }
 
@@ -99,50 +99,51 @@ function obtenerVariante(id_variante) {
  * id (las citas antiguas las referencian); las que se quitan se desactivan.
  * lista = [{ id_variante?, nombre, detalle, precio }]
  */
-const guardarVariantes = db.transaction((id_servicio, lista) => {
-  const actuales = db.prepare(`SELECT id_variante, nombre FROM servicio_variantes WHERE id_servicio = ?`).all(id_servicio);
+const guardarVariantes = db.transaction(async (id_servicio, lista) => {
+  const actuales = await db.prepare(`SELECT id_variante, nombre FROM servicio_variantes WHERE id_servicio = ? ORDER BY id_variante`).all(id_servicio);
   const conservar = new Set();
-  lista.forEach((v, i) => {
+  for (const [i, v] of lista.entries()) {
     const existente =
       actuales.find((a) => a.id_variante === Number(v.id_variante)) ||
       actuales.find((a) => a.nombre.toLowerCase() === v.nombre.trim().toLowerCase());
     if (existente) {
-      db.prepare(
+      await db.prepare(
         `UPDATE servicio_variantes SET nombre = ?, detalle = ?, precio = ?, orden = ?, activo = 1 WHERE id_variante = ?`
       ).run(v.nombre.trim(), v.detalle || null, Number(v.precio), i, existente.id_variante);
       conservar.add(existente.id_variante);
     } else {
-      const info = db
-        .prepare(`INSERT INTO servicio_variantes (id_servicio, nombre, detalle, precio, orden) VALUES (?, ?, ?, ?, ?)`)
+      const info = await db
+        .prepare(`INSERT INTO servicio_variantes (id_servicio, nombre, detalle, precio, orden) VALUES (?, ?, ?, ?, ?) RETURNING id_variante`)
         .run(id_servicio, v.nombre.trim(), v.detalle || null, Number(v.precio), i);
       conservar.add(info.lastInsertRowid);
     }
-  });
+  }
   for (const a of actuales) {
-    if (!conservar.has(a.id_variante)) db.prepare(`UPDATE servicio_variantes SET activo = 0 WHERE id_variante = ?`).run(a.id_variante);
+    if (!conservar.has(a.id_variante)) await db.prepare(`UPDATE servicio_variantes SET activo = 0 WHERE id_variante = ?`).run(a.id_variante);
   }
 });
 
-function buscarPorNombreEnCategoria(id_categoria, nombre) {
+async function buscarPorNombreEnCategoria(id_categoria, nombre) {
   return db
     .prepare(
-      `SELECT * FROM servicios WHERE id_categoria = ? AND nombre = ? COLLATE NOCASE`
+      `SELECT * FROM servicios WHERE id_categoria = ? AND lower(nombre) = lower(?)`
     )
     .get(id_categoria, nombre);
 }
 
-function crear({ id_categoria, nombre, descripcion, duracion_minutos, precio, tipo_precio, orden }) {
-  const info = db
+async function crear({ id_categoria, nombre, descripcion, duracion_minutos, precio, tipo_precio, orden }) {
+  const info = await db
     .prepare(
       `INSERT INTO servicios (id_categoria, nombre, descripcion, duracion_minutos, precio, tipo_precio, orden)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       RETURNING id_servicio`
     )
     .run(id_categoria, nombre, descripcion || null, duracion_minutos, precio, tipo_precio || "FIJO", orden || 0);
   return obtener(info.lastInsertRowid);
 }
 
-function actualizar(id_servicio, { id_categoria, nombre, descripcion, duracion_minutos, precio, tipo_precio, orden }) {
-  db.prepare(
+async function actualizar(id_servicio, { id_categoria, nombre, descripcion, duracion_minutos, precio, tipo_precio, orden }) {
+  await db.prepare(
     `UPDATE servicios
      SET id_categoria = COALESCE(@id_categoria, id_categoria),
          nombre = COALESCE(@nombre, nombre),
@@ -165,16 +166,16 @@ function actualizar(id_servicio, { id_categoria, nombre, descripcion, duracion_m
   return obtener(id_servicio);
 }
 
-function cambiarEstadoActivo(id_servicio, activo) {
-  db.prepare(`UPDATE servicios SET activo = ? WHERE id_servicio = ?`).run(
+async function cambiarEstadoActivo(id_servicio, activo) {
+  await db.prepare(`UPDATE servicios SET activo = ? WHERE id_servicio = ?`).run(
     activo ? 1 : 0,
     id_servicio
   );
   return obtener(id_servicio);
 }
 
-function actualizarImagen(id_servicio, imagen_url) {
-  db.prepare(`UPDATE servicios SET imagen_url = ? WHERE id_servicio = ?`).run(
+async function actualizarImagen(id_servicio, imagen_url) {
+  await db.prepare(`UPDATE servicios SET imagen_url = ? WHERE id_servicio = ?`).run(
     imagen_url,
     id_servicio
   );
@@ -183,8 +184,8 @@ function actualizarImagen(id_servicio, imagen_url) {
 
 // listar devuelve cada servicio con sus variantes
 const listarBase = listar;
-function listarConVariantes(filtros) {
-  return conVariantes(listarBase(filtros));
+async function listarConVariantes(filtros) {
+  return conVariantes(await listarBase(filtros));
 }
 
 module.exports = {

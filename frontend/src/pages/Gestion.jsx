@@ -269,6 +269,7 @@ function ListaClientas({ token }) {
                     <button type="button" className="clienta-boton" onClick={() => setAbierta(c.id_cliente)}>
                       <span className="clienta-nombre">
                         {c.nombres} {c.apellidos}
+                        {c.es_invitado ? <span className="etiqueta-invitada" title="Reservó o compró sin crear cuenta">Sin cuenta</span> : null}
                       </span>
                       <span className="clienta-meta">
                         {c.total_citas ? `${c.total_citas} cita(s)` : "Sin citas"}
@@ -312,6 +313,7 @@ function FichaClienta({ id, token }) {
       <p className="editor-sobretitulo">Clienta desde {c.fecha_creacion?.slice(0, 10).split("-").reverse().join("/")}</p>
       <h2 className="editor-titulo">
         {c.nombres} {c.apellidos}
+        {c.es_invitado ? <span className="etiqueta-invitada">Sin cuenta</span> : null}
       </h2>
       <p className="ficha-contacto">
         {c.email}

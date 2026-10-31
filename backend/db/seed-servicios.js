@@ -178,63 +178,81 @@ const EJEMPLOS = ["Esmaltado permanente", "Extensión pelo a pelo", "Perfilado y
 // Categorias de la plantilla original que el salon no ofrece hoy
 const CATEGORIAS_NO_OFRECIDAS = ["Facial", "Masajes"];
 
-const buscarCategoria = (nombre) => db.prepare(`SELECT * FROM categorias_servicio WHERE nombre = ? COLLATE NOCASE`).get(nombre);
+// lower() = lower(): igual que COLLATE NOCASE de SQLite
+const buscarCategoria = (nombre) => db.prepare(`SELECT * FROM categorias_servicio WHERE lower(nombre) = lower(?)`).get(nombre);
 
 let creados = 0;
 let actualizados = 0;
 
-const ejecutar = db.transaction(() => {
+const ejecutar = db.transaction(async () => {
   // Servicios de ejemplo primero (uno se llama igual que la categoria "Corte y peinado")
   for (const nombre of EJEMPLOS) {
-    const info = db.prepare(`UPDATE servicios SET activo = 0 WHERE nombre = ? AND activo = 1`).run(nombre);
+    const info = await db.prepare(`UPDATE servicios SET activo = 0 WHERE nombre = ? AND activo = 1`).run(nombre);
     if (info.changes) console.log(`Deshabilitado servicio de ejemplo: ${nombre}`);
   }
 
   for (const [posicion, cat] of CATALOGO.entries()) {
-    let categoria = buscarCategoria(cat.nombre) || (cat.antes || []).map(buscarCategoria).find(Boolean);
+    let categoria = await buscarCategoria(cat.nombre);
+    for (const anterior of cat.antes || []) {
+      if (categoria) break;
+      categoria = await buscarCategoria(anterior);
+    }
     if (!categoria) {
-      const info = db.prepare(`INSERT INTO categorias_servicio (nombre) VALUES (?)`).run(cat.nombre);
+      const info = await db.prepare(`INSERT INTO categorias_servicio (nombre) VALUES (?) RETURNING id_categoria`).run(cat.nombre);
       categoria = { id_categoria: info.lastInsertRowid };
       console.log(`Categoría creada: ${cat.nombre}`);
     }
-    db.prepare(
+    await db.prepare(
       `UPDATE categorias_servicio SET nombre = ?, descripcion = ?, indicaciones = ?, adicionales = ?, activo = 1,
          abono = COALESCE(?, abono), orden = ? WHERE id_categoria = ?`
     ).run(cat.nombre, cat.descripcion || null, cat.indicaciones || null, cat.adicionales || null, cat.abono ?? null, posicion + 1, categoria.id_categoria);
 
-    cat.servicios.forEach(([nombre, descripcion, duracion, precio, tipo = "FIJO", variantes = null, antes = []], orden) => {
-      const existente = [nombre, ...antes]
-        .map((n) => db.prepare(`SELECT * FROM servicios WHERE id_categoria = ? AND nombre = ? COLLATE NOCASE`).get(categoria.id_categoria, n))
-        .find(Boolean);
+    for (const [orden, [nombre, descripcion, duracion, precio, tipo = "FIJO", variantes = null, antes = []]] of cat.servicios.entries()) {
+      let existente;
+      for (const n of [nombre, ...antes]) {
+        existente = await db
+          .prepare(`SELECT * FROM servicios WHERE id_categoria = ? AND lower(nombre) = lower(?)`)
+          .get(categoria.id_categoria, n);
+        if (existente) break;
+      }
       let id;
       if (existente) {
-        db.prepare(
+        await db.prepare(
           `UPDATE servicios SET nombre = ?, descripcion = ?, precio = ?, tipo_precio = ?, orden = ?, activo = 1 WHERE id_servicio = ?`
         ).run(nombre, descripcion, precio, tipo, orden, existente.id_servicio);
         id = existente.id_servicio;
         actualizados++;
       } else {
-        id = db
-          .prepare(
-            `INSERT INTO servicios (id_categoria, nombre, descripcion, duracion_minutos, precio, tipo_precio, orden)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`
-          )
-          .run(categoria.id_categoria, nombre, descripcion, duracion, precio, tipo, orden).lastInsertRowid;
+        id = (
+          await db
+            .prepare(
+              `INSERT INTO servicios (id_categoria, nombre, descripcion, duracion_minutos, precio, tipo_precio, orden)
+               VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id_servicio`
+            )
+            .run(categoria.id_categoria, nombre, descripcion, duracion, precio, tipo, orden)
+        ).lastInsertRowid;
         creados++;
       }
-      if (variantes) servicioModel.guardarVariantes(id, variantes);
-    });
+      if (variantes) await servicioModel.guardarVariantes(id, variantes);
+    }
   }
 
   for (const nombre of CATEGORIAS_NO_OFRECIDAS) {
-    const cat = buscarCategoria(nombre);
+    const cat = await buscarCategoria(nombre);
     if (!cat) continue;
-    db.prepare(`UPDATE servicios SET activo = 0 WHERE id_categoria = ?`).run(cat.id_categoria);
-    db.prepare(`UPDATE categorias_servicio SET activo = 0 WHERE id_categoria = ?`).run(cat.id_categoria);
+    await db.prepare(`UPDATE servicios SET activo = 0 WHERE id_categoria = ?`).run(cat.id_categoria);
+    await db.prepare(`UPDATE categorias_servicio SET activo = 0 WHERE id_categoria = ?`).run(cat.id_categoria);
     console.log(`Categoría no ofrecida, deshabilitada: ${nombre}`);
   }
 });
 
-ejecutar();
-console.log(`\nListo: ${creados} servicio(s) creados y ${actualizados} actualizados.`);
-console.log("Revisa las DURACIONES (estimadas) y asigna los servicios nuevos a cada profesional en Panel -> Equipo y horarios.");
+ejecutar()
+  .then(() => {
+    console.log(`\nListo: ${creados} servicio(s) creados y ${actualizados} actualizados.`);
+    console.log("Revisa las DURACIONES (estimadas) y asigna los servicios nuevos a cada profesional en Panel -> Equipo y horarios.");
+  })
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(() => db.close());

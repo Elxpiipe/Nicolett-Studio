@@ -5,7 +5,7 @@
 @import "./gestion.css";
 
 .cuenta {
-  max-width: 960px;
+  max-width: var(--ancho-pagina);
 }
 
 .cuenta-subtitulo {

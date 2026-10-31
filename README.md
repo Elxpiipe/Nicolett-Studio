@@ -29,6 +29,7 @@ salón de belleza en Buin (Proyecto APT, DUOC UC).
 8. [Variables de entorno](#variables-de-entorno)
 9. [Conectar Google Calendar](#conectar-google-calendar)
 10. [Reservas y abono (Webpay)](#reservas-y-abono-webpay)
+    - [Reservar o comprar sin cuenta (invitada)](#reservar-o-comprar-sin-cuenta-invitada)
     - [Mis citas y Mis pedidos](#mis-citas-y-mis-pedidos)
 11. [Tienda online](#tienda-online)
 12. [Correo real con Gmail](#correo-real-con-gmail)
@@ -48,7 +49,7 @@ salón de belleza en Buin (Proyecto APT, DUOC UC).
 |------|------------|
 | Frontend | React 18 + Vite, React Router |
 | Backend | Node.js + Express 4 |
-| Base de datos | SQLite (better-sqlite3) |
+| Base de datos | PostgreSQL 14 o superior (pg) |
 | Autenticación | JWT + bcrypt |
 | Archivos | multer (fotos de servicios y profesionales) |
 | Correo | nodemailer (Gmail o cuenta de prueba Ethereal) |
@@ -74,12 +75,13 @@ salón de belleza en Buin (Proyecto APT, DUOC UC).
 ## Requisitos
 
 - **Node.js 22 LTS**: <https://nodejs.org>. Verifica con `node -v`.
-  ⚠️ **No uses Node 24**: `better-sqlite3` no trae binario para esa versión y la
-  instalación falla pidiendo Visual Studio. En Windows puedes tener varias versiones con
+  En Windows puedes tener varias versiones con
   [nvm-windows](https://github.com/coreybutler/nvm-windows) (`nvm install 22` y `nvm use 22`).
+- **PostgreSQL 14 o superior**: <https://www.postgresql.org/download/>. En Windows el
+  instalador trae pgAdmin para mirar la base de datos. Anota la clave que le pongas al
+  usuario `postgres`.
 - **npm** (viene con Node).
 - **Git**.
-- Opcional: [DB Browser for SQLite](https://sqlitebrowser.org/) para mirar la base de datos.
 
 ## Levantar el proyecto (paso a paso)
 
@@ -102,9 +104,17 @@ cp .env.example .env
 ```
 
 Abre `backend/.env` y cambia `JWT_SECRET` por cualquier texto largo y aleatorio.
-Lo demás funciona tal cual para desarrollo.
+En `DATABASE_URL` pon la clave de tu usuario `postgres`. Lo demás funciona tal cual
+para desarrollo.
 
-Crea la base de datos con **datos de demostración** (servicios reales de Instagram,
+Crea la base vacía en PostgreSQL (una sola vez). Con pgAdmin: clic derecho en
+*Databases* → *Create* → nombre `nicolett_studio`. O por consola:
+
+```bash
+createdb -U postgres nicolett_studio
+```
+
+Crea las tablas con **datos de demostración** (servicios reales de Instagram,
 3 profesionales de ejemplo con horario, productos de ejemplo, un admin y una clienta):
 
 ```bash
@@ -147,7 +157,8 @@ Abre <http://localhost:5173>.
 |-------|---------|----------|
 | backend | `npm run dev` | Servidor con recarga automática |
 | backend | `npm start` | Servidor normal |
-| backend | `npm run db:init` | Crea o actualiza la base de datos (no borra datos) |
+| backend | `npm run db:init` | Crea o actualiza las tablas en PostgreSQL (no borra datos) |
+| backend | `npm run db:migrar-sqlite` | Copia los datos de un `nicolett.db` antiguo (SQLite) a PostgreSQL |
 | backend | `npm run demo` | `db:init` + todos los datos de demostración |
 | backend | `npm run seed:servicios` | Catálogo real de la clienta (11 categorías, precios, indicaciones y adicionales). Se puede volver a ejecutar: actualiza sin duplicar |
 | backend | `npm run seed:demo` | 3 profesionales de ejemplo con servicios y horario |
@@ -203,9 +214,10 @@ nicolett-sync/
 │   ├── credenciales/                # JSON de Google (NO se sube a git)
 │   ├── uploads/                     # Fotos subidas (servicios, profesionales)
 │   ├── db/
-│   │   ├── schema.sql               # Modelo de datos original del informe
-│   │   ├── migrations.sql           # Cambios posteriores (SQL)
-│   │   ├── migraciones.js           # Aplica migraciones al iniciar (idempotente)
+│   │   ├── schema.sql               # Modelo de datos original del informe (SQLite)
+│   │   ├── schema.postgres.sql      # Esquema actual en PostgreSQL (incluye todos los cambios)
+│   │   ├── connection.js            # Conexion a PostgreSQL (pool y transacciones)
+│   │   ├── migrar-desde-sqlite.js   # npm run db:migrar-sqlite
 │   │   ├── init.js                  # npm run db:init
 │   │   └── seed-*.js                # Datos de ejemplo
 │   └── src/
@@ -239,7 +251,7 @@ nicolett-sync/
 | `PORT` | Puerto del backend (4000) |
 | `JWT_SECRET` | Secreto para firmar sesiones. **Cámbialo.** |
 | `JWT_EXPIRES_IN` | Duración de la sesión (ej. `8h`) |
-| `DB_PATH` | Ruta del archivo SQLite |
+| `DATABASE_URL` | Conexión a PostgreSQL: `postgresql://usuario:clave@localhost:5432/nicolett_studio` |
 | `CORS_ORIGIN` / `FRONTEND_URL` | URL del frontend |
 | `SMTP_*` | Correo (ver [Correo real con Gmail](#correo-real-con-gmail)) |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | Ruta al JSON de la cuenta de servicio de Google |
@@ -360,7 +372,7 @@ el panel.
 
 ### Flujo
 
-1. La clienta (con sesión) elige servicio, día, hora y profesional (o "cualquiera
+1. La clienta (con o sin cuenta) elige servicio, día, hora y profesional (o "cualquiera
    disponible") y cómo pagará el abono: **Webpay** o **transferencia**.
 2. El backend vuelve a verificar la hora contra la disponibilidad real (horario,
    bloqueos, otras citas y Google Calendar) y la aparta como `PENDIENTE_ABONO`.
@@ -373,6 +385,29 @@ el panel.
    cancela la reserva con el motivo *"Plazo de abono vencido"*.
 
 Las reservas se identifican con un código legible, por ejemplo `NS-261005-6A8F`.
+
+### Reservar o comprar sin cuenta (invitada)
+
+Cualquier persona puede reservar una hora o comprar en la tienda **sin registrarse**.
+En el último paso (o en el carrito) se le piden sus datos básicos: **nombre, apellido,
+correo y teléfono (WhatsApp)**, y se la invita a crear una cuenta.
+
+- El backend crea una ficha de clienta marcada como *sin cuenta* (`usuarios.es_invitado = 1`)
+  y entrega una sesión corta (**3 horas**) que **solo** sirve para crear, pagar y ver la
+  reserva o el pedido hechos en esa misma visita. No da acceso a *Mis citas*, *Mis pedidos*
+  ni al perfil.
+- Si alguien escribe el correo de otra persona, no puede ver nada de lo que esa persona hizo
+  antes: cada sesión solo ve lo creado durante ella.
+- Si el correo ya tiene una cuenta, se le pide **iniciar sesión** (no se crea otra ficha).
+- La confirmación por correo incluye el botón **"Crear mi cuenta"**, y la página de resultado
+  también, con los datos ya escritos.
+- **Crear la cuenta después:** al registrarse con ese mismo correo, el sistema envía un
+  **enlace de activación** (válido 48 horas). Al crear la contraseña, todas sus reservas y
+  compras anteriores quedan en su cuenta. Esto evita que alguien se apropie del historial de
+  otra persona solo sabiendo su correo.
+- En *Reservas → Clientas* las fichas sin cuenta aparecen con la etiqueta **"Sin cuenta"**.
+- Para cambiar la hora, quien reservó sin cuenta escribe por WhatsApp (o crea su cuenta y
+  lo hace desde *Mis citas*).
 
 ### Reglas implementadas
 
@@ -589,6 +624,7 @@ Base: `http://localhost:4000/api`. Las rutas protegidas usan el encabezado
 | Método | Ruta | Acceso |
 |--------|------|--------|
 | POST | `/auth/registro`, `/auth/login`, `/auth/olvide-password`, `/auth/restablecer-password` | Público |
+| POST | `/auth/invitada` (nombres, apellidos, email, telefono) | Público: sesión de 3 h para reservar o comprar sin cuenta. `409 CUENTA_EXISTENTE` si el correo ya tiene cuenta |
 | GET/PUT | `/auth/perfil`, PUT `/auth/password` | Con sesión |
 | GET/POST/PUT/DELETE | `/usuarios` | Admin |
 | GET | `/categorias`, `/servicios` | Público |
@@ -672,7 +708,10 @@ Todo está hecho de forma genérica y se ajusta desde el panel cuando lleguen lo
 | Problema | Solución |
 |----------|----------|
 | `Falta JWT_SECRET en las variables de entorno` | No existe `backend/.env`. Cópialo desde `.env.example`. |
-| Error al instalar `better-sqlite3` (pide Python o Visual Studio Build Tools) | Estás usando Node 24. Instala **Node 22 LTS**, borra `node_modules` y vuelve a ejecutar `npm install`. |
+| `No se pudo usar PostgreSQL (password authentication failed...)` | La clave de `DATABASE_URL` no es la del usuario `postgres`. |
+| `No se pudo usar PostgreSQL (database "nicolett_studio" does not exist)` | Falta crear la base: `createdb -U postgres nicolett_studio`. |
+| `La base de datos no tiene las tablas` | Ejecuta `npm run db:init` (o `npm run demo`). |
+| Aviso al instalar `better-sqlite3` | Solo se usa para `npm run db:migrar-sqlite`. Si falla (por ejemplo con Node 24), la app funciona igual. |
 | Webpay vuelve a una página que no carga | El frontend debe estar corriendo en `FRONTEND_URL` y el backend en `BACKEND_URL`. |
 | El frontend muestra "Failed to fetch" | El backend no está corriendo, o `VITE_API_URL` no apunta a `http://localhost:4000/api`. |
 | Error de CORS | `CORS_ORIGIN` en `backend/.env` debe ser exactamente la URL del frontend. |
@@ -683,7 +722,7 @@ Todo está hecho de forma genérica y se ajusta desde el panel cuando lleguen lo
 | El evento de prueba sale a otra hora | Revisa la zona horaria del calendario en Google (debe ser Chile). |
 | Una cita aparece **dos veces** en Google | Revisa que haya **un solo backend** corriendo. La copia se borra sola en el siguiente minuto (`duplicados: 1` en la terminal); no la borres a mano. |
 | Una cita confirmada no aparece en Google | Espera un minuto y revisa la terminal **del backend** (no la del frontend): debe decir `Citas sincronizadas` o un error `No se pudo sincronizar NS-…`. Las reservas con Webpay sin pagar no se escriben. |
-| Quiero empezar de cero | Detén el backend, borra `backend/db/nicolett.db` y ejecuta `npm run demo`. |
+| Quiero empezar de cero | Detén el backend, borra la base (`dropdb -U postgres nicolett_studio`), créala de nuevo (`createdb -U postgres nicolett_studio`) y ejecuta `npm run demo`. |
 
 ### Correo: `self-signed certificate in certificate chain`
 
@@ -732,11 +771,56 @@ git commit -m "Flujo de reserva en el frontend"
 git push -u origin modulo-3-2-frontend   # luego abrir el Pull Request en GitHub
 ```
 
-> Las columnas nuevas de la base de datos se agregan solas al iniciar el backend
-> (`db/migraciones.js`), así que al traer cambios de otra persona basta con
-> `npm install` y `npm run dev`. Nunca compartan el archivo `nicolett.db`.
+> Si alguien agrega tablas o columnas, las escribe en `db/schema.postgres.sql`
+> (con `IF NOT EXISTS`). Al traer sus cambios basta con `npm install`, `npm run db:init`
+> y `npm run dev`. Cada persona tiene su propia base PostgreSQL: nunca compartan claves.
 
 ## Registro de cambios
+
+### Octubre 2026 · Base de datos: de SQLite a PostgreSQL
+
+Mismas 30 tablas, 40 llaves foráneas, 58 reglas CHECK, índices y datos. Las fechas siguen
+guardándose como texto `AAAA-MM-DD HH:MM`, así que la lógica de agenda no cambió.
+
+| Archivo | Qué cambió |
+|---------|------------|
+| `backend/db/schema.postgres.sql` | **Nuevo:** esquema completo para PostgreSQL (reemplaza a `migrations.sql` y `migraciones.js`, que se eliminaron) |
+| `backend/db/connection.js` | Conexión a PostgreSQL con `pg`. Mantiene `db.prepare(...).get/all/run` y `db.transaction`, ahora con `await` |
+| `backend/db/migrar-desde-sqlite.js` | **Nuevo:** `npm run db:migrar-sqlite` copia los datos de `nicolett.db` y los verifica fila por fila |
+| `backend/db/init.js` y `seed-*.js` | Usan PostgreSQL |
+| `backend/src/models/*`, `services/*`, `controllers/*`, `routes/*`, `jobs/*`, `middleware/auth.middleware.js` | Consultas asíncronas (`await`). Reservar, cambiar hora, confirmar abono y comprar corren en transacciones, para que dos personas no tomen la misma hora ni las últimas unidades |
+| `backend/server.js` | Revisa la conexión a PostgreSQL antes de arrancar |
+| `backend/package.json`, `.env.example` | `pg` y `DATABASE_URL` en lugar de `DB_PATH` |
+
+**Para pasar tus datos actuales:**
+
+1. Instala PostgreSQL y crea la base: `createdb -U postgres nicolett_studio`.
+2. En `backend/.env` agrega `DATABASE_URL` (ver `.env.example`).
+3. `cd backend`, `npm install` y `npm run db:migrar-sqlite`. Lee `db/nicolett.db`, copia
+   todo y muestra cuántas filas pasó por tabla.
+4. `npm run dev`. El archivo `nicolett.db` queda como respaldo; ya no se usa.
+
+### Octubre 2026 · Pantalla completa, fotos más grandes y reservas/compras sin cuenta
+
+| Archivo | Qué cambió |
+|---------|------------|
+| `frontend/src/styles/global.css` | Variables `--ancho-pagina` y `--margen-lateral`: las páginas usan todo el ancho de la pantalla |
+| `frontend/src/styles/sitio.css`, `catalogo.css`, `agenda.css`, `cuenta.css`, `equipo.css`, `panel.css`, `reservar.css` | Ancho completo con márgenes laterales proporcionales; fotos de servicios más grandes |
+| `frontend/src/styles/marca.css` | Ancho de la barra y la hoja lateral; estilos del formulario "Tus datos" y la etiqueta "Sin cuenta" |
+| `backend/db/migraciones.js` | Nueva columna `usuarios.es_invitado` (se agrega sola al iniciar) |
+| `backend/src/controllers/auth.controller.js`, `routes/auth.routes.js`, `utils/validators.js`, `utils/jwt.js`, `utils/mailer.js` | `POST /auth/invitada` y activación de cuenta para quien ya reservó o compró sin cuenta |
+| `backend/src/middleware/auth.middleware.js` | La sesión de invitada solo sirve en las rutas de reservar, comprar y pagar |
+| `backend/src/controllers/reservas.controller.js`, `tienda.controller.js`, `pagos.controller.js` y sus rutas | Aceptan la sesión de invitada, limitada a lo creado en esa visita |
+| `backend/src/models/usuario.model.js`, `routes/clientes.routes.js` | Marca de clienta sin cuenta |
+| `backend/src/services/notificaciones.service.js` | Correo con botón "Crear mi cuenta" para quien no tiene cuenta |
+| `frontend/src/components/DatosInvitada.jsx`, `utils/invitada.js` | **Nuevos:** formulario "Tus datos" y sesión de invitada |
+| `frontend/src/pages/Reservar.jsx`, `components/tienda/CarritoHoja.jsx` | Reservar y pagar sin cuenta |
+| `frontend/src/pages/Resultado.jsx`, `components/RecordatorioCita.jsx` | Resultado para invitada con invitación a crear cuenta |
+| `frontend/src/pages/Registro.jsx`, `RestablecerPassword.jsx`, `context/AuthContext.jsx`, `api/client.js` | Registro con datos ya escritos y activación ("Crea tu contraseña") |
+| `frontend/src/pages/Gestion.jsx` | Etiqueta "Sin cuenta" en Clientas |
+
+**Después de actualizar:** reinicia backend y frontend. No hay que correr ningún seed: la
+columna nueva se crea sola y no se tocan `.env`, `nicolett.db`, `uploads/` ni `credenciales/`.
 
 ### Octubre 2026 · Productos reales y Google Calendar en funcionamiento
 

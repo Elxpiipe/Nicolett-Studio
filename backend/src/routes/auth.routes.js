@@ -9,33 +9,37 @@ const {
   validarActualizarPerfil,
   validarOlvidePassword,
   validarRestablecerPassword,
+  validarInvitada,
 } = require("../utils/validators");
+const asincrono = require("../utils/asincrono");
 
 const router = Router();
 
 // Publicas
-router.post("/registro", validarRegistro, authController.registro);
-router.post("/login", validarLogin, authController.login);
-router.post("/olvide-password", validarOlvidePassword, authController.olvidePassword);
+router.post("/registro", validarRegistro, asincrono(authController.registro));
+router.post("/login", validarLogin, asincrono(authController.login));
+// Reservar o comprar sin cuenta (sesion corta de invitada)
+router.post("/invitada", validarInvitada, asincrono(authController.invitada));
+router.post("/olvide-password", validarOlvidePassword, asincrono(authController.olvidePassword));
 router.post(
   "/restablecer-password",
   validarRestablecerPassword,
-  authController.restablecerPassword
+  asincrono(authController.restablecerPassword)
 );
 
 // Requieren estar autenticado
-router.get("/perfil", requiereAutenticacion, authController.obtenerPerfil);
+router.get("/perfil", requiereAutenticacion, asincrono(authController.obtenerPerfil));
 router.put(
   "/perfil",
   requiereAutenticacion,
   validarActualizarPerfil,
-  authController.actualizarPerfil
+  asincrono(authController.actualizarPerfil)
 );
 router.put(
   "/password",
   requiereAutenticacion,
   validarCambioPassword,
-  authController.cambiarPassword
+  asincrono(authController.cambiarPassword)
 );
 
 module.exports = router;

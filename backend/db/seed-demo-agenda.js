@@ -66,14 +66,15 @@ async function main() {
   const passwordHash = await hashPassword("Demo12345");
 
   for (const d of DEMO) {
-    let usuario = db.prepare(`SELECT id_usuario FROM usuarios WHERE email = ?`).get(d.email);
+    let usuario = await db.prepare(`SELECT id_usuario FROM usuarios WHERE email = ?`).get(d.email);
     if (!usuario) {
-      const info = db
+      const info = await db
         .prepare(
-          `INSERT INTO usuarios (id_rol, nombres, apellidos, email, password_hash) VALUES (?, ?, ?, ?, ?)`
+          `INSERT INTO usuarios (id_rol, nombres, apellidos, email, password_hash) VALUES (?, ?, ?, ?, ?)
+           RETURNING id_usuario`
         )
         .run(d.administradora ? 1 : 2, d.nombres, d.apellidos, d.email, passwordHash);
-      db.prepare(`INSERT INTO profesionales (id_usuario, descripcion) VALUES (?, ?)`).run(
+      await db.prepare(`INSERT INTO profesionales (id_usuario, descripcion) VALUES (?, ?)`).run(
         info.lastInsertRowid,
         d.descripcion
       );
@@ -83,18 +84,20 @@ async function main() {
       console.log(`Ya existe ${d.email}, se actualizan sus servicios y horario.`);
     }
 
-    if (d.administradora) profesionalModel.cambiarRolUsuario(usuario.id_usuario, true);
-    const profesional = profesionalModel.obtenerPorUsuario(usuario.id_usuario);
-    const servicios = db
-      .prepare(
-        `SELECT s.id_servicio FROM servicios s JOIN categorias_servicio c ON c.id_categoria = s.id_categoria
-         WHERE s.activo = 1 AND c.nombre IN (${d.categorias.map(() => "?").join(",")})`
-      )
-      .all(...d.categorias)
-      .map((s) => s.id_servicio);
+    if (d.administradora) await profesionalModel.cambiarRolUsuario(usuario.id_usuario, true);
+    const profesional = await profesionalModel.obtenerPorUsuario(usuario.id_usuario);
+    const servicios = (
+      await db
+        .prepare(
+          `SELECT s.id_servicio FROM servicios s JOIN categorias_servicio c ON c.id_categoria = s.id_categoria
+           WHERE s.activo = 1 AND c.nombre IN (${d.categorias.map(() => "?").join(",")})
+           ORDER BY s.id_servicio`
+        )
+        .all(...d.categorias)
+    ).map((s) => s.id_servicio);
 
-    profesionalModel.reemplazarServicios(profesional.id_profesional, servicios);
-    profesionalModel.actualizarPerfil(profesional.id_profesional, {
+    await profesionalModel.reemplazarServicios(profesional.id_profesional, servicios);
+    await profesionalModel.actualizarPerfil(profesional.id_profesional, {
       cargo: d.cargo,
       descripcion: d.descripcion,
       // Alias para reconocerla en eventos anotados a mano en Google Calendar
@@ -103,10 +106,15 @@ async function main() {
       orden: d.orden,
       visible_sitio: true,
     });
-    profesionalModel.reemplazarHorario(profesional.id_profesional, HORARIO);
+    await profesionalModel.reemplazarHorario(profesional.id_profesional, HORARIO);
     console.log(`  ${servicios.length} servicio(s) asignados y horario cargado.`);
   }
   console.log("\nListo. Revisa y ajusta todo en Panel -> Equipo y horarios.");
 }
 
-main();
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(() => db.close());

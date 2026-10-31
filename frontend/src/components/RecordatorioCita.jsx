@@ -33,7 +33,7 @@ export function useRecordatorio(reserva) {
   return { abierto, abrir: () => setAbierto(true), cerrar };
 }
 
-export default function RecordatorioCita({ reserva, onCerrar, horasCambio = 48 }) {
+export default function RecordatorioCita({ reserva, onCerrar, horasCambio = 48, sinCuenta = false }) {
   const indicaciones = leerLineas(reserva.indicaciones);
   return (
     <Hoja titulo="Antes de tu cita" onCerrar={onCerrar}>
@@ -59,7 +59,7 @@ export default function RecordatorioCita({ reserva, onCerrar, horasCambio = 48 }
               Tu abono de <strong>{formatearPrecio(reserva.monto_abono)}</strong> se descuenta del total del servicio.
             </li>
             <li>
-              Si necesitas cambiar la hora, hazlo desde <strong>Mis citas</strong> con al menos{" "}
+              Si necesitas cambiar la hora, hazlo {sinCuenta ? <>escribiéndonos por <strong>WhatsApp</strong></> : <>desde <strong>Mis citas</strong></>} con al menos{" "}
               <strong>{horasCambio} horas</strong> de anticipación.
             </li>
             <li className="regla-importante">

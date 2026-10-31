@@ -15,6 +15,7 @@ import PieMarca from "../components/marca/PieMarca";
 import { IconoWhatsApp, Loto } from "../components/marca/Iconos";
 import { fechaLarga } from "./Reservar";
 import RecordatorioCita, { useRecordatorio } from "../components/RecordatorioCita";
+import { enlaceCrearCuenta, leerInvitada } from "../utils/invitada";
 import "../styles/catalogo.css";
 import "../styles/marca.css";
 import "../styles/sitio.css";
@@ -47,18 +48,22 @@ export default function Resultado() {
   const [params] = useSearchParams();
   const codigo = params.get("codigo");
   const pista = params.get("estado");
-  const { usuario, token } = useAuth();
+  const { usuario, token: tokenCuenta } = useAuth();
+  // Sin cuenta: se usa la sesion de invitada de esta pestaña (si aun esta vigente)
+  const [invitada] = useState(() => leerInvitada());
+  const token = usuario ? tokenCuenta : invitada?.token;
+  const datosInvitada = usuario ? null : invitada?.datos;
   const carrito = useCarrito();
   const [dato, setDato] = useState(null);
   const [error, setError] = useState("");
   const [reintentando, setReintentando] = useState(false);
 
   useEffect(() => {
-    if (!usuario || !codigo) return;
+    if (!token || !codigo) return;
     (esCompra ? api.obtenerPedido(codigo, token) : api.obtenerReserva(codigo, token))
       .then((r) => setDato(esCompra ? r.pedido : r.reserva))
       .catch((err) => setError(err.message));
-  }, [usuario, codigo, esCompra, token]);
+  }, [codigo, esCompra, token]);
 
   // Compra pagada: se vacia el carrito
   useEffect(() => {
@@ -78,7 +83,7 @@ export default function Resultado() {
   }
 
   let contenido;
-  if (!usuario) {
+  if (!token) {
     contenido = (
       <Marco tono="info" titulo="Inicia sesión">
         <p>Para ver el estado de tu {esCompra ? "compra" : "reserva"}, inicia sesión con tu cuenta.</p>
@@ -97,9 +102,9 @@ export default function Resultado() {
   } else if (!dato) {
     contenido = <p className="estado-carga">Revisando tu pago…</p>;
   } else if (esCompra) {
-    contenido = <ResultadoCompra pedido={dato} pista={pista} onReintentar={reintentar} reintentando={reintentando} error={error} />;
+    contenido = <ResultadoCompra pedido={dato} invitada={datosInvitada} pista={pista} onReintentar={reintentar} reintentando={reintentando} error={error} />;
   } else {
-    contenido = <ResultadoReserva reserva={dato} pista={pista} onReintentar={reintentar} reintentando={reintentando} error={error} />;
+    contenido = <ResultadoReserva reserva={dato} invitada={datosInvitada} pista={pista} onReintentar={reintentar} reintentando={reintentando} error={error} />;
   }
 
   return (
@@ -107,6 +112,20 @@ export default function Resultado() {
       <BarraSitio />
       <main className="pagina-sitio">{contenido}</main>
       <PieMarca />
+    </div>
+  );
+}
+
+// Invitacion a crear cuenta (solo para quien reservo o compro sin cuenta)
+function InvitacionCuenta({ datos, que }) {
+  if (!datos) return null;
+  return (
+    <div className="invitacion-cuenta">
+      <p>
+        <strong>¿Te creas una cuenta?</strong> Con tu correo {datos.email} podrás ver {que}, cambiar tu hora y
+        reservar más rápido la próxima vez. Tus datos ya quedan escritos.
+      </p>
+      <Link to={enlaceCrearCuenta(datos)} className="boton boton-cacao">Crear mi cuenta</Link>
     </div>
   );
 }
@@ -144,12 +163,12 @@ function ResultadoReserva(props) {
           </button>
         </p>
       )}
-      {recordatorio.abierto && <RecordatorioCita reserva={props.reserva} onCerrar={recordatorio.cerrar} />}
+      {recordatorio.abierto && <RecordatorioCita reserva={props.reserva} onCerrar={recordatorio.cerrar} sinCuenta={Boolean(props.invitada)} />}
     </>
   );
 }
 
-function ContenidoReserva({ reserva: r, pista, onReintentar, reintentando, error }) {
+function ContenidoReserva({ reserva: r, invitada, pista, onReintentar, reintentando, error }) {
   const whatsapp = enlaceWhatsApp(
     `Hola, reservé ${r.servicio} para el ${fechaLarga(r.fecha_hora_inicio.slice(0, 10))} a las ${r.fecha_hora_inicio.slice(11)} ` +
       `(código ${r.codigo_cita}). Quiero pagar el abono de ${formatearPrecio(r.monto_abono)} por transferencia, ¿me envían los datos?`
@@ -160,7 +179,11 @@ function ContenidoReserva({ reserva: r, pista, onReintentar, reintentando, error
       <Marco tono="exito" titulo="¡Tu hora está confirmada!">
         <p>Te esperamos. Recuerda que los cambios de hora son con 48 horas de anticipación.</p>
         <DatosReserva r={r} />
-        <Link to="/panel/mis-citas" className="boton boton-linea">Ver mis citas</Link>
+        {invitada ? (
+          <InvitacionCuenta datos={invitada} que="tus citas" />
+        ) : (
+          <Link to="/panel/mis-citas" className="boton boton-linea">Ver mis citas</Link>
+        )}
       </Marco>
     );
   }
@@ -178,6 +201,7 @@ function ContenidoReserva({ reserva: r, pista, onReintentar, reintentando, error
           Coordinar transferencia por WhatsApp
         </a>
         <DatosReserva r={r} />
+        <InvitacionCuenta datos={invitada} que="tus citas" />
       </Marco>
     );
   }
@@ -237,14 +261,15 @@ function ItemsPedido({ p }) {
   );
 }
 
-function ResultadoCompra({ pedido: p, pista, onReintentar, reintentando, error }) {
+function ResultadoCompra({ pedido: p, invitada, pista, onReintentar, reintentando, error }) {
   if (p.estado === "PAGADA") {
     return (
       <Marco tono="exito" titulo="¡Gracias por tu compra!">
         <p>Tu pago está confirmado. Retira tu pedido en el salón, Avenida Bernardo O'Higgins 979, Buin, mostrando el código de tu pedido.</p>
         <ItemsPedido p={p} />
+        <InvitacionCuenta datos={invitada} que="tus pedidos" />
         <div className="resultado-acciones">
-          <Link to="/panel/mis-pedidos" className="boton boton-linea">Ver mis pedidos</Link>
+          {!invitada && <Link to="/panel/mis-pedidos" className="boton boton-linea">Ver mis pedidos</Link>}
           <Link to="/tienda" className="boton-texto">Seguir comprando</Link>
         </div>
       </Marco>

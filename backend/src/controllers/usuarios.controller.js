@@ -9,10 +9,10 @@ const { serializarUsuario } = require("./auth.controller");
 /**
  * GET /api/usuarios?id_rol=&activo=&busqueda=&pagina=&tamanoPagina=
  */
-function listar(req, res) {
+async function listar(req, res) {
   const { id_rol, activo, busqueda, pagina, tamanoPagina } = req.query;
 
-  const resultado = usuarioModel.listarUsuarios({
+  const resultado = await usuarioModel.listarUsuarios({
     id_rol: id_rol ? Number(id_rol) : undefined,
     activo: activo === undefined ? undefined : activo === "1",
     busqueda,
@@ -26,12 +26,12 @@ function listar(req, res) {
 /**
  * GET /api/usuarios/:id
  */
-function obtener(req, res) {
-  const usuario = usuarioModel.findById(Number(req.params.id));
+async function obtener(req, res) {
+  const usuario = await usuarioModel.findById(Number(req.params.id));
   if (!usuario) {
     return res.status(404).json({ error: "Usuario no encontrado" });
   }
-  const extendido = usuarioModel.getPerfilExtendido(usuario.id_usuario, usuario.id_rol);
+  const extendido = await usuarioModel.getPerfilExtendido(usuario.id_usuario, usuario.id_rol);
   return res.json({ usuario, ...extendido });
 }
 
@@ -40,7 +40,7 @@ function obtener(req, res) {
  * El Administrador puede crear usuarios de CUALQUIER rol
  * (incluyendo Profesional y otros Administradores).
  */
-function crear(req, res) {
+async function crear(req, res) {
   const {
     nombres,
     apellidos,
@@ -55,15 +55,15 @@ function crear(req, res) {
     fecha_ingreso,
   } = req.body;
 
-  const existente = usuarioModel.findByEmail(email);
+  const existente = await usuarioModel.findByEmail(email);
   if (existente) {
     return res.status(409).json({ error: "Ya existe un usuario con ese email" });
   }
-  if (rut && usuarioModel.findByRut(rut)) {
+  if (rut && await usuarioModel.findByRut(rut)) {
     return res.status(409).json({ error: "Ya existe un usuario con ese RUT" });
   }
 
-  const usuario = usuarioModel.crearUsuarioConPerfil({
+  const usuario = await usuarioModel.crearUsuarioConPerfil({
     id_rol,
     rut,
     nombres,
@@ -84,9 +84,9 @@ function crear(req, res) {
  * PUT /api/usuarios/:id
  * Actualiza datos basicos de cualquier usuario.
  */
-function actualizar(req, res) {
+async function actualizar(req, res) {
   const id_usuario = Number(req.params.id);
-  const existente = usuarioModel.findById(id_usuario);
+  const existente = await usuarioModel.findById(id_usuario);
   if (!existente) {
     return res.status(404).json({ error: "Usuario no encontrado" });
   }
@@ -94,19 +94,19 @@ function actualizar(req, res) {
   const { nombres, apellidos, telefono, rut, email } = req.body;
 
   if (email) {
-    const conMismoEmail = usuarioModel.findByEmail(email);
+    const conMismoEmail = await usuarioModel.findByEmail(email);
     if (conMismoEmail && conMismoEmail.id_usuario !== id_usuario) {
       return res.status(409).json({ error: "Ese email ya lo usa otro usuario" });
     }
   }
   if (rut) {
-    const conMismoRut = usuarioModel.findByRut(rut);
+    const conMismoRut = await usuarioModel.findByRut(rut);
     if (conMismoRut && conMismoRut.id_usuario !== id_usuario) {
       return res.status(409).json({ error: "Ese RUT ya lo usa otro usuario" });
     }
   }
 
-  const usuario = usuarioModel.actualizarUsuario(id_usuario, {
+  const usuario = await usuarioModel.actualizarUsuario(id_usuario, {
     nombres,
     apellidos,
     telefono,
@@ -122,9 +122,9 @@ function actualizar(req, res) {
  * Baja logica (activo = 0). Nunca se borra fisicamente para no romper
  * la integridad referencial con citas, ventas, historial clinico, etc.
  */
-function eliminar(req, res) {
+async function eliminar(req, res) {
   const id_usuario = Number(req.params.id);
-  const existente = usuarioModel.findById(id_usuario);
+  const existente = await usuarioModel.findById(id_usuario);
   if (!existente) {
     return res.status(404).json({ error: "Usuario no encontrado" });
   }
@@ -133,21 +133,21 @@ function eliminar(req, res) {
     return res.status(400).json({ error: "No puedes deshabilitar tu propia cuenta" });
   }
 
-  const usuario = usuarioModel.cambiarEstadoActivo(id_usuario, false);
+  const usuario = await usuarioModel.cambiarEstadoActivo(id_usuario, false);
   return res.json({ mensaje: "Usuario deshabilitado", usuario });
 }
 
 /**
  * PUT /api/usuarios/:id/reactivar
  */
-function reactivar(req, res) {
+async function reactivar(req, res) {
   const id_usuario = Number(req.params.id);
-  const existente = usuarioModel.findById(id_usuario);
+  const existente = await usuarioModel.findById(id_usuario);
   if (!existente) {
     return res.status(404).json({ error: "Usuario no encontrado" });
   }
 
-  const usuario = usuarioModel.cambiarEstadoActivo(id_usuario, true);
+  const usuario = await usuarioModel.cambiarEstadoActivo(id_usuario, true);
   return res.json({ mensaje: "Usuario reactivado", usuario });
 }
 

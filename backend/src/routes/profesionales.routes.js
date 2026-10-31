@@ -21,19 +21,19 @@ const subirFotoProfesional = crearSubida("profesionales", "profesional");
 // Admin y Profesional (el controlador limita a la Profesional a su propia ficha)
 router.use(requiereAutenticacion, requiereRol("Administrador", "Profesional"));
 
-router.get("/", ctrl.listar);
+router.get("/", asincrono(ctrl.listar));
 router.post("/", soloAdmin, validarCrearProfesional, asincrono(ctrl.crear));
-router.post("/yo", soloAdmin, ctrl.crearPerfilPropio);
-router.get("/:id", validarIdProfesionalParam, ctrl.obtener);
-router.put("/:id", validarIdProfesionalParam, validarPerfilProfesional, ctrl.actualizar);
-router.put("/:id/estado", validarIdProfesionalParam, validarEstadoProfesional, ctrl.cambiarEstado);
-router.put("/:id/administradora", soloAdmin, validarIdProfesionalParam, ctrl.cambiarAccesoAdmin);
-router.post("/:id/foto", soloAdmin, validarIdProfesionalParam, subirFotoProfesional, ctrl.subirFoto);
-router.delete("/:id/foto", validarIdProfesionalParam, ctrl.quitarFoto);
-router.put("/:id/servicios", validarIdProfesionalParam, validarAsignarServicios, ctrl.asignarServicios);
-router.put("/:id/horario", validarIdProfesionalParam, validarHorario, ctrl.guardarHorario);
-router.get("/:id/bloqueos", validarIdProfesionalParam, ctrl.listarBloqueos);
-router.post("/:id/bloqueos", validarIdProfesionalParam, validarBloqueo, ctrl.crearBloqueo);
-router.delete("/:id/bloqueos/:idBloqueo", validarIdProfesionalParam, ctrl.eliminarBloqueo);
+router.post("/yo", soloAdmin, asincrono(ctrl.crearPerfilPropio));
+router.get("/:id", validarIdProfesionalParam, asincrono(ctrl.obtener));
+router.put("/:id", validarIdProfesionalParam, validarPerfilProfesional, asincrono(ctrl.actualizar));
+router.put("/:id/estado", validarIdProfesionalParam, validarEstadoProfesional, asincrono(ctrl.cambiarEstado));
+router.put("/:id/administradora", soloAdmin, validarIdProfesionalParam, asincrono(ctrl.cambiarAccesoAdmin));
+router.post("/:id/foto", soloAdmin, validarIdProfesionalParam, subirFotoProfesional, asincrono(ctrl.subirFoto));
+router.delete("/:id/foto", validarIdProfesionalParam, asincrono(ctrl.quitarFoto));
+router.put("/:id/servicios", validarIdProfesionalParam, validarAsignarServicios, asincrono(ctrl.asignarServicios));
+router.put("/:id/horario", validarIdProfesionalParam, validarHorario, asincrono(ctrl.guardarHorario));
+router.get("/:id/bloqueos", validarIdProfesionalParam, asincrono(ctrl.listarBloqueos));
+router.post("/:id/bloqueos", validarIdProfesionalParam, validarBloqueo, asincrono(ctrl.crearBloqueo));
+router.delete("/:id/bloqueos/:idBloqueo", validarIdProfesionalParam, asincrono(ctrl.eliminarBloqueo));
 
 module.exports = router;

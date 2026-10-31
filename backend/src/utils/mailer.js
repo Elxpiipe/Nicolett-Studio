@@ -51,7 +51,27 @@ async function obtenerTransporter() {
   return transporterPromise;
 }
 
-async function enviarCorreoRecuperacion({ destinatario, nombre, enlaceRecuperacion }) {
+/** Correo para que una invitada cree su contraseña y vea su historial */
+async function enviarActivacion({ destinatario, nombre, enlace }) {
+  const html = `
+      <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
+        <h2 style="color:#211d17;">Crea tu cuenta en Nicolett Studio Fantasy</h2>
+        <p>Hola ${nombre},</p>
+        <p>Ya reservaste o compraste con este correo. Crea tu contraseña para ver tus citas y pedidos, cambiar tu hora y reservar más rápido. Este enlace es válido por <strong>48 horas</strong>:</p>
+        <p><a href="${enlace}" style="background:#211d17;color:#faf6ef;padding:10px 18px;border-radius:3px;text-decoration:none;">Crear mi contraseña</a></p>
+        <p style="color:#777;font-size:13px;">Si tú no lo pediste, puedes ignorar este correo.</p>
+      </div>`;
+  const texto = `Hola ${nombre},\n\nYa reservaste o compraste con este correo. Crea tu contraseña para ver tus citas y pedidos (enlace válido por 48 horas):\n${enlace}\n\nSi tú no lo pediste, ignora este correo.`;
+  const r = await enviarCorreo({ destinatario, asunto: "Crea tu cuenta — Nicolett Studio Fantasy", html, texto });
+  if (r.ok) return {};
+  if (usaSmtpReal()) throw new Error("No se pudo enviar el correo de activacion");
+  // Desarrollo sin correo disponible: se muestra el enlace en la consola para poder probar
+  console.log(`Mailer (modo consola) -> ${destinatario}: ${enlace}`);
+  return { enlaceDirecto: enlace };
+}
+
+async function enviarCorreoRecuperacion({ destinatario, nombre, enlaceRecuperacion, tipo }) {
+  if (tipo === "activacion") return enviarActivacion({ destinatario, nombre, enlace: enlaceRecuperacion });
   const datosCorreo = {
     from: process.env.SMTP_FROM || '"Nicolett Studio Fantasy" <no-responder@nicolett.cl>',
     to: destinatario,

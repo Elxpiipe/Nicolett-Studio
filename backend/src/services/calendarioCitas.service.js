@@ -77,25 +77,25 @@ function firma(cita) {
   return `${cita.estado}|${cita.fecha_hora_inicio}|${cita.id_profesional}`;
 }
 
-function guardarVinculo(id_cita, eventId, calendarId, estado) {
-  db.prepare(
+async function guardarVinculo(id_cita, eventId, calendarId, estado) {
+  await db.prepare(
     `UPDATE citas SET google_calendar_event_id = ?, google_calendar_calendario = ?, google_calendar_estado = ?
      WHERE id_cita = ?`
   ).run(eventId, calendarId, estado, id_cita);
 }
 
 /** Citas que podrian necesitar un cambio en Google */
-function candidatas() {
+async function candidatas() {
   const desde = `${sumarDias(ahoraChile().fecha, -1)} 00:00`; // no se reescribe el historial antiguo
-  return db
+  const filas = await db
     .prepare(
       `SELECT c.codigo_cita FROM citas c
        WHERE c.google_calendar_event_id IS NOT NULL
-          OR (c.estado <> 'CANCELADA' AND c.fecha_hora_fin > ?)`
+          OR (c.estado <> 'CANCELADA' AND c.fecha_hora_fin > ?)
+       ORDER BY c.id_cita`
     )
-    .all(desde)
-    .map((f) => citaModel.obtenerPorCodigo(f.codigo_cita))
-    .filter(Boolean);
+    .all(desde);
+  return (await Promise.all(filas.map((f) => citaModel.obtenerPorCodigo(f.codigo_cita)))).filter(Boolean);
 }
 
 /** Borra de Google los eventos de una cita que no sean `conservar` (duplicados) */
@@ -117,7 +117,7 @@ async function eventosExistentes(citas) {
   const calendarios = new Set();
   for (const cita of citas) {
     if (cita.google_calendar_calendario) calendarios.add(cita.google_calendar_calendario);
-    const destino = googleCalendar.calendarioParaProfesional(cita.id_profesional);
+    const destino = await googleCalendar.calendarioParaProfesional(cita.id_profesional);
     if (destino) calendarios.add(destino);
   }
   const desde = sumarDias(ahoraChile().fecha, -1);
@@ -146,7 +146,7 @@ async function sincronizarCita(cita, ahora, existentes, resumen) {
     let borrados = 0;
     if (tiene) {
       await googleCalendar.eliminarEvento(cita.google_calendar_calendario, cita.google_calendar_event_id);
-      guardarVinculo(cita.id_cita, null, null, null);
+      await guardarVinculo(cita.id_cita, null, null, null);
       borrados++;
     }
     resumen.duplicados += await borrarSobrantes(enGoogle, cita.google_calendar_event_id);
@@ -155,17 +155,17 @@ async function sincronizarCita(cita, ahora, existentes, resumen) {
 
   // 2) Corresponde y no esta vinculada: reutilizar si ya existe en Google, si no crear
   if (!tiene) {
-    const calendarId = googleCalendar.calendarioParaProfesional(cita.id_profesional);
+    const calendarId = await googleCalendar.calendarioParaProfesional(cita.id_profesional);
     if (!calendarId) return null; // Google desactivado o la profesional sin calendario
     const previo = enGoogle.find((ev) => ev.calendarId === calendarId);
     if (previo) {
       await googleCalendar.actualizarEvento(calendarId, previo.id, datosEvento(cita));
-      guardarVinculo(cita.id_cita, previo.id, calendarId, firma(cita));
+      await guardarVinculo(cita.id_cita, previo.id, calendarId, firma(cita));
       resumen.duplicados += await borrarSobrantes(enGoogle, previo.id);
       return "actualizado";
     }
     const ev = await googleCalendar.crearEvento(calendarId, datosEvento(cita));
-    guardarVinculo(cita.id_cita, ev.id, calendarId, firma(cita));
+    await guardarVinculo(cita.id_cita, ev.id, calendarId, firma(cita));
     resumen.duplicados += await borrarSobrantes(enGoogle, ev.id);
     return "creado";
   }
@@ -177,10 +177,10 @@ async function sincronizarCita(cita, ahora, existentes, resumen) {
   if (cita.google_calendar_estado !== firma(cita)) {
     // Si al cambiar de profesional cambia tambien el calendario (modo por profesional),
     // se borra en el antiguo y se crea en el nuevo en la proxima vuelta
-    const calendarioNuevo = googleCalendar.calendarioParaProfesional(cita.id_profesional);
+    const calendarioNuevo = await googleCalendar.calendarioParaProfesional(cita.id_profesional);
     if (calendarioNuevo && calendarioNuevo !== cita.google_calendar_calendario) {
       await googleCalendar.eliminarEvento(cita.google_calendar_calendario, cita.google_calendar_event_id);
-      guardarVinculo(cita.id_cita, null, null, null);
+      await guardarVinculo(cita.id_cita, null, null, null);
       return "recrear";
     }
     try {
@@ -189,12 +189,12 @@ async function sincronizarCita(cita, ahora, existentes, resumen) {
         cita.google_calendar_event_id,
         datosEvento(cita)
       );
-      guardarVinculo(cita.id_cita, cita.google_calendar_event_id, cita.google_calendar_calendario, firma(cita));
+      await guardarVinculo(cita.id_cita, cita.google_calendar_event_id, cita.google_calendar_calendario, firma(cita));
       return "actualizado";
     } catch (err) {
       // Lo borraron a mano en Google: se olvida el vinculo y se recrea en la proxima vuelta
       if (err.statusGoogle === 404 || err.statusGoogle === 410) {
-        guardarVinculo(cita.id_cita, null, null, null);
+        await guardarVinculo(cita.id_cita, null, null, null);
         return "recrear";
       }
       throw err;
@@ -219,9 +219,9 @@ async function sincronizar() {
     const resumen = { creado: 0, actualizado: 0, eliminado: 0, recrear: 0, duplicados: 0, errores: 0 };
     try {
       // Sin conexion configurada no hay a quien escribir
-      if (googleCalendar.modo() === "desactivado") return resumen;
+      if ((await googleCalendar.modo()) === "desactivado") return resumen;
       const ahora = ahoraChile().texto;
-      const citas = candidatas();
+      const citas = await candidatas();
       const existentes = await eventosExistentes(citas);
       for (const cita of citas) {
         try {
@@ -239,7 +239,7 @@ async function sincronizar() {
       enCurso = null;
       if (repetir) {
         repetir = false;
-        setImmediate(() => sincronizar().catch(() => {}));
+        db.enSegundoPlano(() => sincronizar().catch(() => {}));
       }
     }
   })();
@@ -248,7 +248,8 @@ async function sincronizar() {
 
 /** Para llamar despues de un cambio sin esperar a Google (no bloquea la respuesta) */
 function sincronizarEnSegundoPlano() {
-  setImmediate(() => sincronizar().catch((err) => console.error("[Google Calendar]", err.message)));
+  // Fuera de cualquier transaccion: corre cuando la reserva ya quedo guardada
+  db.enSegundoPlano(() => sincronizar().catch((err) => console.error("[Google Calendar]", err.message)));
 }
 
 module.exports = { sincronizar, sincronizarEnSegundoPlano, debeEstarEnCalendario, datosEvento };

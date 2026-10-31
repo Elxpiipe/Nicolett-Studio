@@ -2,7 +2,7 @@
 const { Router } = require("express");
 const { body, validationResult } = require("express-validator");
 const ctrl = require("../controllers/pagos.controller");
-const { requiereAutenticacion, requiereRol } = require("../middleware/auth.middleware");
+const { requiereAutenticacion, requiereRol, permitirInvitada } = require("../middleware/auth.middleware");
 const asincrono = require("../utils/asincrono");
 
 function manejarErrores(req, res, next) {
@@ -20,6 +20,7 @@ const router = Router();
 
 router.post(
   "/webpay/iniciar",
+  permitirInvitada,
   requiereAutenticacion,
   requiereRol("Cliente"),
   body("codigo_cita").matches(/^NS-\d{6}-[0-9A-F]{4}$/).withMessage("Codigo de reserva invalido"),
@@ -30,6 +31,7 @@ router.post(
 // Pago de un pedido de la tienda
 router.post(
   "/webpay/iniciar-compra",
+  permitirInvitada,
   requiereAutenticacion,
   requiereRol("Cliente"),
   body("codigo_venta").matches(/^NV-\d{6}-[0-9A-F]{4}$/).withMessage("Codigo de pedido invalido"),

@@ -18,6 +18,7 @@ const { errorHttp } = require("./reservas.service");
 const calendarioCitas = require("./calendarioCitas.service");
 const ventaModel = require("../models/venta.model");
 const { notificar } = require("./notificaciones.service");
+const db = require("../../db/connection");
 
 function transaccion() {
   const produccion = process.env.WEBPAY_COMMERCE_CODE && process.env.WEBPAY_API_KEY;
@@ -47,8 +48,8 @@ const urlFrontend = () => process.env.FRONTEND_URL || "http://localhost:5173";
  * con el campo token_ws = token (asi lo exige Webpay).
  */
 async function iniciarPago(codigo_cita, id_usuario) {
-  const cita = citaModel.obtenerPorCodigo(codigo_cita);
-  if (!cita || cita.id_cliente !== citaModel.clienteDeUsuario(id_usuario)) {
+  const cita = await citaModel.obtenerPorCodigo(codigo_cita);
+  if (!cita || cita.id_cliente !== (await citaModel.clienteDeUsuario(id_usuario))) {
     throw errorHttp(404, "Reserva no encontrada");
   }
   if (cita.estado !== "PENDIENTE_ABONO") throw errorHttp(409, "Esta reserva no está esperando abono");
@@ -63,19 +64,19 @@ async function iniciarPago(codigo_cita, id_usuario) {
   const respuesta = await crearTransaccion(ordenCompra, `S-${cita.id_cita}`, cita.monto_abono);
 
   // Mientras la clienta esta en Webpay, la hora se mantiene apartada 15 minutos mas
-  const { minutosRetencionWebpay } = reglasAgenda();
+  const { minutosRetencionWebpay } = await reglasAgenda();
   let expira = ahoraChile(new Date(Date.now() + minutosRetencionWebpay * 60000)).texto;
   if (expira > cita.fecha_hora_inicio) expira = cita.fecha_hora_inicio;
-  pagoModel.registrarInicioWebpay(cita.id_pago, cita.id_cita, respuesta.token, expira);
+  await pagoModel.registrarInicioWebpay(cita.id_pago, cita.id_cita, respuesta.token, expira);
 
   return { url: respuesta.url, token: respuesta.token };
 }
 
 /** ¿Otra cita vigente tomo la hora mientras esta estaba vencida? */
-function horaTomadaPorOtra(cita) {
-  return profesionalModel
-    .citasQueTocan(cita.id_profesional, cita.fecha_hora_inicio, cita.fecha_hora_fin)
-    .some((c) => c.id_cita !== cita.id_cita);
+async function horaTomadaPorOtra(cita) {
+  return (await profesionalModel.citasQueTocan(cita.id_profesional, cita.fecha_hora_inicio, cita.fecha_hora_fin)).some(
+    (c) => c.id_cita !== cita.id_cita
+  );
 }
 
 /**
@@ -99,7 +100,7 @@ async function procesarRetorno(datos) {
     return resultado((datos.TBK_ORDEN_COMPRA || "").slice(0, 14), estado);
   }
 
-  const pago = pagoModel.obtenerPorToken(token);
+  const pago = await pagoModel.obtenerPorToken(token);
   if (!pago) return resultado("", "error");
   if (pago.tipo_pago === "PAGO_VENTA") return procesarRetornoVenta(pago, token, resultado);
   // Si la clienta recarga la pagina, no se confirma dos veces
@@ -111,7 +112,7 @@ async function procesarRetorno(datos) {
   } catch (err) {
     // Si el navegador envio el retorno dos veces, la primera solicitud pudo
     // aprobarlo y esta segunda falla en Transbank: se revisa antes de dar error.
-    if (pagoModel.obtenerPorToken(token)?.estado === "APROBADO") return resultado(pago.codigo_cita, "aprobado");
+    if ((await pagoModel.obtenerPorToken(token))?.estado === "APROBADO") return resultado(pago.codigo_cita, "aprobado");
     console.error("Webpay commit fallo:", err.message);
     return resultado(pago.codigo_cita, "error");
   }
@@ -129,23 +130,30 @@ async function procesarRetorno(datos) {
   const aprobado =
     respuesta.response_code === 0 && respuesta.status === "AUTHORIZED" && respuesta.amount === pago.monto;
   if (!aprobado) {
-    pagoModel.rechazarPago(pago.id_pago, detalle);
+    await pagoModel.rechazarPago(pago.id_pago, detalle);
     return resultado(pago.codigo_cita, "rechazado");
   }
 
   // Si la cita vencio mientras la clienta pagaba (el plazo corrio o ya se cancelo
   // por vencimiento), se confirma igual siempre que nadie haya tomado la hora.
-  const cita = citaModel.obtenerPorCodigo(pago.codigo_cita);
-  if (cita.estado !== "CONFIRMADA" && horaTomadaPorOtra(cita)) {
-    // Caso muy raro: pago tarde y otra clienta alcanzo a tomar la hora.
-    // El abono queda registrado para que la administracion reagende o devuelva.
-    pagoModel.registrarAbonoFueraDePlazo(pago.id_pago, pago.id_cita, detalle);
+  // Revisar y guardar va en una sola transaccion (nadie toma la hora entremedio).
+  const fueraDePlazo = await db.transaction(async () => {
+    const cita = await citaModel.obtenerPorCodigo(pago.codigo_cita);
+    if (cita.estado !== "CONFIRMADA" && (await horaTomadaPorOtra(cita))) {
+      // Caso muy raro: pago tarde y otra clienta alcanzo a tomar la hora.
+      // El abono queda registrado para que la administracion reagende o devuelva.
+      await pagoModel.registrarAbonoFueraDePlazo(pago.id_pago, pago.id_cita, detalle);
+      return true;
+    }
+    await pagoModel.aprobarAbono(pago.id_pago, pago.id_cita, detalle);
+    return false;
+  })();
+  if (fueraDePlazo) {
     calendarioCitas.sincronizarEnSegundoPlano();
-    console.warn(`Reserva ${cita.codigo_cita}: abono pagado pero la hora ya fue tomada. Revisar.`);
+    console.warn(`Reserva ${pago.codigo_cita}: abono pagado pero la hora ya fue tomada. Revisar.`);
     return resultado(pago.codigo_cita, "revision");
   }
 
-  pagoModel.aprobarAbono(pago.id_pago, pago.id_cita, detalle);
   calendarioCitas.sincronizarEnSegundoPlano(); // la cita confirmada aparece en Google
   notificar("reservaConfirmada", pago.codigo_cita);
   return resultado(pago.codigo_cita, "aprobado");
@@ -157,8 +165,8 @@ async function procesarRetorno(datos) {
 
 /** Inicia el pago de un pedido de la tienda. Devuelve { url, token } */
 async function iniciarPagoVenta(codigo_venta, id_usuario) {
-  const venta = ventaModel.obtenerPorCodigo(codigo_venta);
-  if (!venta || venta.id_cliente !== citaModel.clienteDeUsuario(id_usuario)) {
+  const venta = await ventaModel.obtenerPorCodigo(codigo_venta);
+  if (!venta || venta.id_cliente !== (await citaModel.clienteDeUsuario(id_usuario))) {
     throw errorHttp(404, "Pedido no encontrado");
   }
   if (venta.estado !== "PENDIENTE") throw errorHttp(409, "Este pedido no está esperando pago");
@@ -170,9 +178,9 @@ async function iniciarPagoVenta(codigo_venta, id_usuario) {
   const respuesta = await crearTransaccion(ordenCompra, `V-${venta.id_venta}`, venta.total);
 
   // Mientras paga, el stock se mantiene apartado 15 minutos mas
-  const { minutosRetencionWebpay } = reglasAgenda();
-  ventaModel.extenderPlazo(venta.id_venta, ahoraChile(new Date(Date.now() + minutosRetencionWebpay * 60000)).texto);
-  pagoModel.registrarInicioWebpayVenta(venta.id_pago, respuesta.token);
+  const { minutosRetencionWebpay } = await reglasAgenda();
+  await ventaModel.extenderPlazo(venta.id_venta, ahoraChile(new Date(Date.now() + minutosRetencionWebpay * 60000)).texto);
+  await pagoModel.registrarInicioWebpayVenta(venta.id_pago, respuesta.token);
   return { url: respuesta.url, token: respuesta.token };
 }
 
@@ -183,7 +191,7 @@ async function procesarRetornoVenta(pago, token, resultado) {
   try {
     respuesta = await transaccion().commit(token);
   } catch (err) {
-    if (pagoModel.obtenerPorToken(token)?.estado === "APROBADO") return resultado(pago.codigo_venta, "aprobado");
+    if ((await pagoModel.obtenerPorToken(token))?.estado === "APROBADO") return resultado(pago.codigo_venta, "aprobado");
     console.error("Webpay commit (tienda) fallo:", err.message);
     return resultado(pago.codigo_venta, "error");
   }
@@ -200,11 +208,11 @@ async function procesarRetornoVenta(pago, token, resultado) {
   const aprobado =
     respuesta.response_code === 0 && respuesta.status === "AUTHORIZED" && respuesta.amount === pago.monto;
   if (!aprobado) {
-    pagoModel.rechazarPago(pago.id_pago, detalle);
+    await pagoModel.rechazarPago(pago.id_pago, detalle);
     return resultado(pago.codigo_venta, "rechazado");
   }
 
-  const estado = ventaModel.aprobarPago(pago.id_pago, pago.id_venta, detalle);
+  const estado = await ventaModel.aprobarPago(pago.id_pago, pago.id_venta, detalle);
   if (estado === "revision") console.warn(`Pedido ${pago.codigo_venta}: pagado fuera de plazo y sin stock. Revisar.`);
   else notificar("compraPagada", pago.codigo_venta);
   return resultado(pago.codigo_venta, estado === "pagado" ? "aprobado" : "revision");

@@ -7,6 +7,7 @@ const ventaModel = require("../models/venta.model");
 const reservas = require("../services/reservas.service");
 const { requiereAutenticacion, requiereRol } = require("../middleware/auth.middleware");
 const { manejarErrores } = require("./tienda.routes");
+const asincrono = require("../utils/asincrono");
 
 const router = Router();
 router.use(requiereAutenticacion, requiereRol("Administrador"));
@@ -19,46 +20,47 @@ router.get(
   "/",
   query("busqueda").optional({ values: "falsy" }).trim().isLength({ max: 80 }),
   manejarErrores,
-  (req, res) => {
+  asincrono(async (req, res) => {
     const filtro = req.query.busqueda ? `%${req.query.busqueda}%` : null;
-    const datos = db
+    const datos = await db
       .prepare(
-        `SELECT c.id_cliente, u.nombres, u.apellidos, u.email, u.telefono, u.activo,
+        `SELECT c.id_cliente, u.nombres, u.apellidos, u.email, u.telefono, u.activo, u.es_invitado,
                 COUNT(ci.id_cita) AS total_citas,
-                SUM(ci.estado = 'ATENDIDA') AS atendidas,
+                SUM((ci.estado = 'ATENDIDA')::int) AS atendidas,
                 MAX(CASE WHEN ci.estado IN ('ATENDIDA','CONFIRMADA') THEN ci.fecha_hora_inicio END) AS ultima_cita
          FROM clientes c
          JOIN usuarios u ON u.id_usuario = c.id_usuario
          LEFT JOIN citas ci ON ci.id_cliente = c.id_cliente
-         WHERE (@filtro IS NULL OR u.nombres || ' ' || u.apellidos LIKE @filtro OR u.email LIKE @filtro OR u.telefono LIKE @filtro)
-         GROUP BY c.id_cliente
-         ORDER BY u.nombres COLLATE NOCASE, u.apellidos COLLATE NOCASE
+         WHERE (@filtro::text IS NULL OR u.nombres || ' ' || u.apellidos ILIKE @filtro OR u.email ILIKE @filtro OR u.telefono ILIKE @filtro)
+         GROUP BY c.id_cliente, u.id_usuario
+         ORDER BY lower(u.nombres), lower(u.apellidos), c.id_cliente
          LIMIT 500`
       )
       .all({ filtro });
     return res.json({ datos });
-  }
+  })
 );
 
 /** GET /api/clientes/:id — ficha de la clienta: datos, resumen, citas y compras */
-router.get("/:id", param("id").isInt({ min: 1 }), manejarErrores, (req, res) => {
+router.get("/:id", param("id").isInt({ min: 1 }), manejarErrores, asincrono(async (req, res) => {
   const id_cliente = Number(req.params.id);
-  const cliente = db
+  const cliente = await db
     .prepare(
       `SELECT c.id_cliente, c.fecha_nacimiento, c.preferencias, u.nombres, u.apellidos, u.email, u.telefono,
-              u.activo, u.fecha_creacion
+              u.activo, u.es_invitado, u.fecha_creacion
        FROM clientes c JOIN usuarios u ON u.id_usuario = c.id_usuario WHERE c.id_cliente = ?`
     )
     .get(id_cliente);
   if (!cliente) return res.status(404).json({ error: "Clienta no encontrada" });
 
-  const citas = citaModel.listarDeCliente(id_cliente).map((c) => ({
-    ...reservas.vistaPublica(c),
-    observaciones: c.observaciones,
-    fecha_atencion: c.fecha_atencion,
-  }));
-  const pedidos = ventaModel
-    .listarDeCliente(id_cliente)
+  const citas = await Promise.all(
+    (await citaModel.listarDeCliente(id_cliente)).map(async (c) => ({
+      ...(await reservas.vistaPublica(c)),
+      observaciones: c.observaciones,
+      fecha_atencion: c.fecha_atencion,
+    }))
+  );
+  const pedidos = (await ventaModel.listarDeCliente(id_cliente))
     .filter((v) => v.estado === "PAGADA")
     .map((v) => ({ codigo_venta: v.codigo_venta, fecha: v.fecha_pago || v.fecha, total: v.total, items: v.items, fecha_entrega: v.fecha_entrega }));
 
@@ -79,6 +81,6 @@ router.get("/:id", param("id").isInt({ min: 1 }), manejarErrores, (req, res) => 
     })(),
   };
   return res.json({ cliente, resumen, citas, pedidos });
-});
+}));
 
 module.exports = router;

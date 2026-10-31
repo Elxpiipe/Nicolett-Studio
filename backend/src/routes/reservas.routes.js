@@ -2,7 +2,7 @@
 const { Router } = require("express");
 const { body, param, query, validationResult } = require("express-validator");
 const ctrl = require("../controllers/reservas.controller");
-const { requiereAutenticacion, requiereRol } = require("../middleware/auth.middleware");
+const { requiereAutenticacion, requiereRol, permitirInvitada } = require("../middleware/auth.middleware");
 const asincrono = require("../utils/asincrono");
 
 function manejarErrores(req, res, next) {
@@ -46,8 +46,9 @@ const validarCodigo = [
 const router = Router();
 const soloAdmin = requiereRol("Administrador");
 
-router.post("/", requiereAutenticacion, requiereRol("Cliente"), validarCrearReserva, asincrono(ctrl.crear));
-router.get("/", requiereAutenticacion, soloAdmin, validarListado, ctrl.listar);
+// Crear y ver la reserva tambien se puede como invitada (sin cuenta)
+router.post("/", permitirInvitada, requiereAutenticacion, requiereRol("Cliente"), validarCrearReserva, asincrono(ctrl.crear));
+router.get("/", requiereAutenticacion, soloAdmin, validarListado, asincrono(ctrl.listar));
 // Agenda del dia (antes de "/:codigo")
 router.get(
   "/agenda",
@@ -56,7 +57,7 @@ router.get(
   query("fecha").optional({ values: "falsy" }).matches(FECHA).withMessage("La fecha debe tener formato AAAA-MM-DD"),
   query("id_profesional").optional({ values: "falsy" }).isInt({ min: 1 }),
   manejarErrores,
-  ctrl.agenda
+  asincrono(ctrl.agenda)
 );
 router.post(
   "/:codigo/atencion",
@@ -66,12 +67,12 @@ router.post(
   body("estado").isIn(["ATENDIDA", "NO_ASISTE", "CONFIRMADA"]).withMessage("Estado inválido"),
   body("observaciones").optional({ values: "falsy" }).trim().isLength({ max: 1000 }),
   manejarErrores,
-  ctrl.atencion
+  asincrono(ctrl.atencion)
 );
 
 // "/mias" va antes de "/:codigo" para que no se lea como un codigo
-router.get("/mias", requiereAutenticacion, requiereRol("Cliente"), ctrl.mias);
-router.get("/:codigo", requiereAutenticacion, validarCodigo, ctrl.obtener);
+router.get("/mias", requiereAutenticacion, requiereRol("Cliente"), asincrono(ctrl.mias));
+router.get("/:codigo", permitirInvitada, requiereAutenticacion, validarCodigo, asincrono(ctrl.obtener));
 router.post(
   "/:codigo/reagendar",
   requiereAutenticacion,
@@ -83,7 +84,7 @@ router.post(
   manejarErrores,
   asincrono(ctrl.reagendar)
 );
-router.post("/:codigo/cancelar", requiereAutenticacion, requiereRol("Cliente"), validarCodigo, ctrl.cancelar);
+router.post("/:codigo/cancelar", requiereAutenticacion, requiereRol("Cliente"), validarCodigo, asincrono(ctrl.cancelar));
 router.post(
   "/:codigo/confirmar-abono",
   requiereAutenticacion,
@@ -91,7 +92,7 @@ router.post(
   validarCodigo,
   body("referencia").optional({ values: "falsy" }).trim().isLength({ max: 100 }),
   manejarErrores,
-  ctrl.confirmarAbono
+  asincrono(ctrl.confirmarAbono)
 );
 
 module.exports = router;

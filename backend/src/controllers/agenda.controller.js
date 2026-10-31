@@ -8,26 +8,24 @@ const { ahoraChile } = require("../utils/fechas");
 const citaModel = require("../models/cita.model");
 
 /** ?excluir=NS-... : al cambiar de hora, la cita propia no bloquea su horario */
-function idExcluido(req) {
+async function idExcluido(req) {
   const codigo = req.query.excluir;
   if (!codigo || !/^NS-\d{6}-[0-9A-F]{4}$/.test(codigo)) return undefined;
-  return citaModel.obtenerPorCodigo(codigo)?.id_cita;
+  return (await citaModel.obtenerPorCodigo(codigo))?.id_cita;
 }
 
 /** GET /api/agenda/reglas — abono, 48 horas, etc. (para mostrarlas en la reserva) */
-function reglas(req, res) {
-  return res.json({ reglas: reglasAgenda(), hoy: ahoraChile().fecha });
+async function reglas(req, res) {
+  return res.json({ reglas: await reglasAgenda(), hoy: ahoraChile().fecha });
 }
 
 /** GET /api/agenda/profesionales?id_servicio= */
-function profesionalesPorServicio(req, res) {
-  const datos = profesionalModel
-    .listarPorServicio(Number(req.query.id_servicio))
-    .map((p) => ({
-      id_profesional: p.id_profesional,
-      nombre: `${p.nombres} ${p.apellidos}`,
-      descripcion: p.descripcion,
-    }));
+async function profesionalesPorServicio(req, res) {
+  const datos = (await profesionalModel.listarPorServicio(Number(req.query.id_servicio))).map((p) => ({
+    id_profesional: p.id_profesional,
+    nombre: `${p.nombres} ${p.apellidos}`,
+    descripcion: p.descripcion,
+  }));
   return res.json({ datos });
 }
 
@@ -37,7 +35,7 @@ async function horasLibres(req, res) {
     id_servicio: Number(req.query.id_servicio),
     fecha: req.query.fecha,
     id_profesional: req.query.id_profesional ? Number(req.query.id_profesional) : undefined,
-    excluirIdCita: idExcluido(req),
+    excluirIdCita: await idExcluido(req),
   });
   return res.json(resultado);
 }
@@ -49,7 +47,7 @@ async function diasDisponibles(req, res) {
     id_profesional: req.query.id_profesional ? Number(req.query.id_profesional) : undefined,
     desde: req.query.desde,
     dias: req.query.dias ? Number(req.query.dias) : 14,
-    excluirIdCita: idExcluido(req),
+    excluirIdCita: await idExcluido(req),
   });
   return res.json({ datos });
 }
