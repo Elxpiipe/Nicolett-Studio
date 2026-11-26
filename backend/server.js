@@ -17,6 +17,7 @@ const pagosRoutes = require("./src/routes/pagos.routes");
 const tiendaRoutes = require("./src/routes/tienda.routes");
 const promocionesRoutes = require("./src/routes/promociones.routes");
 const clientesRoutes = require("./src/routes/clientes.routes");
+const whatsappRoutes = require("./src/routes/whatsapp.routes");
 const { iniciarVencimientos } = require("./src/jobs/vencimientos");
 const db = require("./db/connection");
 
@@ -27,7 +28,14 @@ app.use(
     origin: process.env.CORS_ORIGIN || "*",
   })
 );
-app.use(express.json());
+app.use(
+  express.json({
+    // El webhook de WhatsApp necesita el cuerpo original para comprobar la firma de Meta
+    verify: (req, res, buf) => {
+      if (req.originalUrl.startsWith("/api/whatsapp/webhook")) req.rawBody = buf;
+    },
+  })
+);
 // Webpay puede devolver a la clienta con un formulario POST (token_ws)
 app.use(express.urlencoded({ extended: false }));
 
@@ -55,6 +63,7 @@ app.use("/api/productos", tiendaRoutes.productos);
 app.use("/api/pedidos", tiendaRoutes.pedidos);
 app.use("/api/promociones", promocionesRoutes);
 app.use("/api/clientes", clientesRoutes);
+app.use("/api/whatsapp", whatsappRoutes);
 
 // 404
 app.use((req, res) => {

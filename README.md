@@ -32,14 +32,15 @@ salón de belleza en Buin (Proyecto APT, DUOC UC).
     - [Reservar o comprar sin cuenta (invitada)](#reservar-o-comprar-sin-cuenta-invitada)
     - [Mis citas y Mis pedidos](#mis-citas-y-mis-pedidos)
 11. [Tienda online](#tienda-online)
-12. [Correo real con Gmail](#correo-real-con-gmail)
-13. [Reglas de negocio](#reglas-de-negocio)
-14. [API](#api)
-15. [Datos pendientes de la clienta](#datos-pendientes-de-la-clienta)
-16. [Próximos pasos](#próximos-pasos)
-17. [Problemas comunes](#problemas-comunes)
-18. [Trabajo en equipo con Git](#trabajo-en-equipo-con-git)
-19. [Registro de cambios](#registro-de-cambios)
+12. [Agente de WhatsApp](#agente-de-whatsapp)
+13. [Correo real con Gmail](#correo-real-con-gmail)
+14. [Reglas de negocio](#reglas-de-negocio)
+15. [API](#api)
+16. [Datos pendientes de la clienta](#datos-pendientes-de-la-clienta)
+17. [Próximos pasos](#próximos-pasos)
+18. [Problemas comunes](#problemas-comunes)
+19. [Trabajo en equipo con Git](#trabajo-en-equipo-con-git)
+20. [Registro de cambios](#registro-de-cambios)
 
 ---
 
@@ -70,7 +71,7 @@ salón de belleza en Buin (Proyecto APT, DUOC UC).
 | Abono por categoría ($10.000 cabello, $5.000 resto) | ✅ Editable en el catálogo |
 | Tienda: productos, carrito, pago con Webpay, stock y pedidos | ✅ |
 | 3.3 Mis citas (cambiar hora con regla de 48 h, cancelar, historial) y Mis pedidos (repetir pedido) | ✅ |
-| 4. Agente de WhatsApp | ⏳ Pendiente |
+| 4. Agente de WhatsApp (reservar, mis citas, precios, horario, hablar con una persona) | ✅ Probado con el simulador del panel. Falta conectarlo al número del salón en Meta |
 
 ## Requisitos
 
@@ -204,6 +205,9 @@ Creadas por `npm run demo`:
    día y hora → abono. Con Webpay usa las [tarjetas de prueba](#probar-un-pago-con-webpay-ambiente-de-integración);
    con transferencia, la reserva aparece en **Panel → Reservas** para que la
    administradora la confirme. En la **Tienda**, agrega productos al carrito y paga.
+5. **WhatsApp** (como administradora): **Panel → WhatsApp → Simulador**. Escribe "hola",
+   reserva una hora tocando las opciones, pide "hablar con una persona" y responde desde
+   **Conversaciones**. Ver [Agente de WhatsApp](#agente-de-whatsapp).
 
 ## Estructura de carpetas
 
@@ -230,6 +234,12 @@ nicolett-sync/
 │       │   ├── webpay.service.js           # Pago del abono con Webpay Plus
 │       │   ├── googleCalendar.service.js   # Conexión con Google (leer y escribir)
 │       │   └── calendarioCitas.service.js  # Citas -> eventos de Google Calendar
+│       ├── whatsapp/                # Agente de WhatsApp
+│       │   ├── bot.js               # La conversación (menús, reservar, mis citas, precios...)
+│       │   ├── webhook.js           # Recibe los mensajes que manda Meta
+│       │   ├── envio.js             # Envía mensajes por la API de Meta
+│       │   ├── avisos.js            # Abono confirmado / hora liberada, por el chat
+│       │   └── mensajes.js, formato.js, config.js, whatsapp.model.js
 │       ├── jobs/vencimientos.js     # Cada minuto: vence reservas y sincroniza Google
 │       ├── middleware/              # JWT, roles, subida de archivos
 │       └── utils/                   # Fechas (hora de Chile), validaciones, correo
@@ -257,6 +267,12 @@ nicolett-sync/
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | Ruta al JSON de la cuenta de servicio de Google |
 | `BACKEND_URL` | URL pública del backend, a la que Webpay devuelve a la clienta (por defecto `http://localhost:4000`) |
 | `WEBPAY_COMMERCE_CODE` / `WEBPAY_API_KEY` | **Solo producción.** Vacías = ambiente de integración (sin cobros reales) |
+| `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` | Credenciales de la API de WhatsApp (Meta). Vacías = el agente solo funciona en el simulador |
+| `WHATSAPP_VERIFY_TOKEN` | Palabra que eliges tú y escribes igual en Meta al configurar el webhook |
+| `WHATSAPP_APP_SECRET` | Clave secreta de la app de Meta. Con ella el backend comprueba que los mensajes vienen de Meta |
+| `WHATSAPP_API_VERSION` | Versión de la API de Meta (por defecto `v23.0`) |
+| `WHATSAPP_NUMERO_PUBLICO` | Número del salón en WhatsApp, solo dígitos. Se usa en el botón "Volver a WhatsApp" después de pagar |
+| `WHATSAPP_AVISO_EMAIL` | Correo que recibe el aviso cuando una clienta pide hablar con una persona (por defecto `SMTP_USER`) |
 
 **`frontend/.env`**
 
@@ -564,6 +580,116 @@ Endpoints: `GET /api/clientes?busqueda=` y `GET /api/clientes/:id` (solo adminis
 Además, al terminar una reserva aparece una **ventana con los cuidados del servicio**
 (ej. pestañas limpias) y las reglas de agendamiento, una vez por reserva.
 
+## Agente de WhatsApp
+
+El asistente responde solo a las clientas por WhatsApp, con menús y botones (pensado
+para que cualquier persona lo use, también clientas mayores). Entiende si tocan una
+opción, si escriben su número ("1", "2"...) o palabras sueltas como "reservar",
+"precios", "horario", "mis citas" o "persona". "MENÚ" vuelve siempre al inicio.
+
+Qué puede hacer la clienta:
+
+- **Reservar una hora:** tipo de servicio → servicio → largo de cabello (si aplica) →
+  profesional (o "me da lo mismo") → día → hora → resumen con valor y abono → pago.
+  Con **tarjeta** recibe un botón que abre Webpay; con **transferencia** recibe los datos
+  de la cuenta y manda la foto del comprobante por el mismo chat.
+- **Mis citas:** ver sus próximas citas, pagar un abono pendiente, cambiar la hora
+  (con la regla de 48 horas) o cancelar.
+- **Servicios y precios** por categoría, y **horario y dirección** con enlace al mapa.
+- **Hablar con una persona:** el asistente queda en pausa con esa clienta, la conversación
+  aparece "por responder" en el panel y llega un correo de aviso. La administradora
+  responde desde el panel y, cuando termina, toca **Devolver al asistente**.
+
+Además, el asistente avisa solo por el chat cuando el abono se confirma (Webpay o
+transferencia confirmada en el panel) y cuando una hora se libera porque el abono no llegó.
+
+Usa **exactamente las mismas reglas** que la página: mismo cálculo de horas libres,
+mismo Google Calendar, mismos abonos y plazos. Una hora tomada por WhatsApp desaparece
+de la web y viceversa. Si el número de quien escribe coincide con el de una clienta
+registrada, el asistente la reconoce. Si no, le pide su nombre y crea su ficha (aparece
+en Clientas como "Sin cuenta" y "Llegó por WhatsApp").
+
+### Probarlo sin Meta (simulador)
+
+**Panel → WhatsApp → Simulador.** Funciona sin ninguna credencial: escribes como si fueras
+una clienta y ves las respuestas con sus botones. Las reservas que hagas son reales en la
+agenda (cancélalas después), pero ningún mensaje sale por WhatsApp. Si pones el teléfono
+de una clienta registrada, el asistente la reconoce. Es la forma más segura de mostrarlo
+en la demo.
+
+En **Configuración** se escriben los datos bancarios que el asistente entrega para pagar
+por transferencia.
+
+### Conectarlo a WhatsApp con el número de prueba de Meta
+
+Meta entrega gratis un número de prueba que puede escribir hasta a 5 celulares
+registrados. Los nombres de los menús de Meta pueden cambiar un poco con el tiempo.
+
+1. **Crea la app.** Entra a <https://developers.facebook.com> con una cuenta de Facebook →
+   **Mis apps → Crear app**. Elige el caso de uso de WhatsApp ("Conectar con clientes por
+   WhatsApp") y asóciala a un portafolio comercial (se puede crear en el momento).
+2. **Copia los datos de prueba.** En la app, **WhatsApp → Configuración de la API**:
+   - **Identificador del número de teléfono** → `WHATSAPP_PHONE_NUMBER_ID`
+   - **Token de acceso temporal** → `WHATSAPP_TOKEN` (dura 24 horas; abajo está cómo
+     sacar uno permanente)
+   - En **Para**, agrega los celulares del equipo y confírmalos con el código que llega
+     por WhatsApp. El número de prueba solo puede escribirle a esos números.
+3. **Copia la clave secreta.** **Configuración de la app → Básica → Clave secreta de la
+   app** → `WHATSAPP_APP_SECRET`.
+4. **Inventa un token de verificación**, por ejemplo `nicolett-2026-webhook`, y ponlo en
+   `WHATSAPP_VERIFY_TOKEN`.
+5. **Haz público tu backend con ngrok** (Meta y el celular de la clienta no pueden entrar a
+   `localhost`). Instala ngrok (<https://ngrok.com/download>), crea una cuenta gratis y en
+   otra terminal ejecuta:
+
+   ```bash
+   ngrok http 4000
+   ```
+
+   Copia la URL `https://...ngrok-free.app` que aparece y ponla en `BACKEND_URL` en
+   `backend/.env`. Reinicia el backend.
+6. **Configura el webhook en Meta.** **WhatsApp → Configuración → Webhook → Editar**:
+   - URL de devolución de llamada: `https://...ngrok-free.app/api/whatsapp/webhook`
+     (está lista para copiar en Panel → WhatsApp → Configuración)
+   - Token de verificación: el mismo de `WHATSAPP_VERIFY_TOKEN`
+   - Toca **Verificar y guardar** y luego, en **Campos del webhook**, suscríbete a `messages`.
+7. **Prueba.** En Panel → WhatsApp → Configuración toca **Probar conexión**. Luego, desde un
+   celular de la lista "Para", escríbele "hola" al número de prueba.
+
+> Con ngrok gratis la URL cambia cada vez que lo reinicias: hay que actualizar
+> `BACKEND_URL` y la URL del webhook en Meta.
+
+**Token permanente** (para no renovarlo cada 24 horas): en <https://business.facebook.com>
+→ **Configuración del negocio → Usuarios del sistema** → crea un usuario administrador,
+asígnale la app y la cuenta de WhatsApp, y toca **Generar token** con los permisos
+`whatsapp_business_messaging` y `whatsapp_business_management`.
+
+### Pasar a producción
+
+1. **Verificar el negocio** en Meta (Configuración del negocio → Centro de seguridad).
+   Lo hace la dueña con los datos del salón; puede tardar algunos días.
+2. **Elegir el número del asistente.** El número que se conecta a la API queda dedicado a
+   ella: lo más simple es usar un número nuevo para el asistente y dejar el actual
+   (+56 9 4032 2551) para la atención personal. Se agrega en **WhatsApp → Configuración
+   de la API → Agregar número de teléfono** y Meta revisa el nombre que se mostrará.
+3. **Agregar un método de pago** en la cuenta de WhatsApp. Meta cobra algunos tipos de
+   mensaje; responder a una clienta dentro de las 24 horas desde su último mensaje no se
+   cobraba según los precios vigentes a la fecha de este README. Revisa
+   <https://developers.facebook.com/docs/whatsapp/pricing> antes de activar.
+4. **Servidor con URL fija y https** (en vez de ngrok) para `BACKEND_URL` y el webhook.
+5. Token permanente, `WHATSAPP_NUMERO_PUBLICO` con el número nuevo y datos de
+   transferencia reales en el panel.
+
+### Límites que pone WhatsApp
+
+- Solo se puede escribirle a una clienta dentro de las **24 horas** siguientes a su último
+  mensaje. Por eso los avisos del asistente (abono confirmado, hora liberada) llegan bien,
+  pero un recordatorio el día antes de la cita necesitaría una plantilla aprobada por Meta
+  (queda como próximo paso).
+- Listas de máximo 10 opciones: si hay más (días, horas), el asistente muestra 9 y una
+  opción "Ver más opciones".
+- Audios y stickers no se entienden: el asistente vuelve a mostrar el menú.
+
 ## Correo real con Gmail
 
 Mientras `SMTP_PASS` esté vacío, los correos (recuperación de contraseña) se envían a
@@ -669,6 +795,14 @@ Base: `http://localhost:4000/api`. Las rutas protegidas usan el encabezado
 | GET/PUT | `/integraciones/google` | Admin |
 | POST/DELETE | `/integraciones/google/prueba` | Admin |
 | GET | `/integraciones/google/ocupacion` | Admin |
+| GET/POST | `/whatsapp/webhook` | Público (lo llama Meta; el POST se verifica con `WHATSAPP_APP_SECRET`) |
+| GET | `/whatsapp/pagar/:codigo?f=` | Público con firma: abre Webpay para pagar el abono de una reserva hecha por WhatsApp |
+| GET | `/whatsapp/pago-resultado?estado=` | Público: página que ve la clienta al volver de Webpay |
+| GET | `/whatsapp/estado`, POST `/whatsapp/probar`, PUT `/whatsapp/config` | Admin |
+| GET | `/whatsapp/conversaciones`, `/whatsapp/conversaciones/:telefono` | Admin |
+| POST | `/whatsapp/conversaciones/:telefono/responder`, `/bot`, `/atendida` | Admin |
+| GET | `/whatsapp/media/:id` | Admin (foto que mandó la clienta, ej. comprobante) |
+| GET/POST/DELETE | `/whatsapp/simulador`, `/whatsapp/simulador/:telefono` | Admin |
 
 ## Datos pendientes de la clienta
 
@@ -696,12 +830,11 @@ Todo está hecho de forma genérica y se ajusta desde el panel cuando lleguen lo
    calendario con la cuenta de servicio y se cambia el ID en el panel (ver
    [Conectar Google Calendar](#conectar-google-calendar)).
 2. **Productos:** subir fotos, fijar stock y poner precio a los 4 productos "Por definir".
-3. **Agente de WhatsApp (4):** WhatsApp Business Platform (Meta) con número de prueba
-   gratuito para desarrollo. Usará **las mismas funciones** que la web (horas libres,
-   reservar, abono), por lo que queda conectado al **mismo Google Calendar**. Estará
-   pensado para personas mayores: botones y listas, un paso a la vez y opción de hablar
-   con una persona. Para producción la clienta debe verificar su negocio en Meta
-   (conviene iniciar ese trámite con tiempo).
+3. **WhatsApp en producción:** que la clienta verifique su negocio en Meta y defina qué
+   número usará el asistente (ver [Pasar a producción](#pasar-a-producción)). Conviene
+   iniciar ese trámite con tiempo.
+4. **Recordatorio el día antes por WhatsApp:** necesita una plantilla aprobada por Meta,
+   porque WhatsApp no deja escribirle a alguien que no ha escrito en las últimas 24 horas.
 
 ## Problemas comunes
 
@@ -722,6 +855,12 @@ Todo está hecho de forma genérica y se ajusta desde el panel cuando lleguen lo
 | El evento de prueba sale a otra hora | Revisa la zona horaria del calendario en Google (debe ser Chile). |
 | Una cita aparece **dos veces** en Google | Revisa que haya **un solo backend** corriendo. La copia se borra sola en el siguiente minuto (`duplicados: 1` en la terminal); no la borres a mano. |
 | Una cita confirmada no aparece en Google | Espera un minuto y revisa la terminal **del backend** (no la del frontend): debe decir `Citas sincronizadas` o un error `No se pudo sincronizar NS-…`. Las reservas con Webpay sin pagar no se escriben. |
+| Meta dice que no pudo validar la URL del webhook | El backend debe estar corriendo y ser público (ngrok), y `WHATSAPP_VERIFY_TOKEN` debe ser idéntico al que escribiste en Meta. Si reiniciaste ngrok, la URL cambió. |
+| El asistente no contesta en el celular | Revisa la terminal del backend. En Meta, el webhook debe estar suscrito al campo `messages`. Con el número de prueba, tu celular debe estar en la lista "Para". |
+| En el panel sale "Sin conexión con Meta" | Faltan `WHATSAPP_TOKEN` y `WHATSAPP_PHONE_NUMBER_ID` en `backend/.env`, o no reiniciaste el backend. |
+| Error de Meta código 190 | El token venció. El token temporal dura 24 horas: genera otro o usa uno permanente. |
+| Error de Meta código 131030 | Ese celular no está en la lista "Para" del número de prueba. |
+| Al pagar desde el celular aparece una página de ngrok | Es el aviso de la versión gratuita de ngrok. Toca "Visit Site" y sigue al pago. |
 | Quiero empezar de cero | Detén el backend, borra la base (`dropdb -U postgres nicolett_studio`), créala de nuevo (`createdb -U postgres nicolett_studio`) y ejecuta `npm run demo`. |
 
 ### Correo: `self-signed certificate in certificate chain`
@@ -776,6 +915,28 @@ git push -u origin modulo-3-2-frontend   # luego abrir el Pull Request en GitHub
 > y `npm run dev`. Cada persona tiene su propia base PostgreSQL: nunca compartan claves.
 
 ## Registro de cambios
+
+### Noviembre 2026 · Agente de WhatsApp
+
+| Archivo | Qué cambió |
+|---------|------------|
+| `backend/src/whatsapp/` | **Nuevo:** el agente (conversación, webhook de Meta, envío, avisos) |
+| `backend/src/routes/whatsapp.routes.js` | **Nuevo:** webhook, enlace de pago del abono, panel y simulador |
+| `backend/db/schema.postgres.sql` | Tablas `whatsapp_contactos`, `whatsapp_sesiones`, `whatsapp_mensajes`; columna `citas.origen` (WEB o WHATSAPP); configuración de datos de transferencia |
+| `backend/server.js` | Rutas `/api/whatsapp` y lectura de la firma de Meta |
+| `backend/src/services/notificaciones.service.js` | El abono confirmado también se avisa por WhatsApp si la reserva vino de ahí |
+| `backend/src/jobs/vencimientos.js` | Avisa por WhatsApp cuando una hora se libera por falta de abono |
+| `backend/src/controllers/pagos.controller.js` | Al volver de Webpay, las reservas de WhatsApp ven una página simple |
+| `backend/src/services/reservas.service.js` | Exporta `citaDeLaClienta` (lo usa el agente) |
+| `backend/src/utils/mailer.js` | No envía correos a las clientas creadas por WhatsApp (no tienen correo) |
+| `backend/.env.example` | Variables `WHATSAPP_*` |
+| `frontend/src/pages/WhatsApp.jsx`, `styles/whatsapp.css` | **Nuevo:** Panel → WhatsApp (conversaciones, simulador, configuración) |
+| `frontend/src/App.jsx`, `components/marca/SubnavPanel.jsx`, `api/client.js` | Ruta, pestaña y llamadas del panel de WhatsApp |
+| `frontend/src/utils/formato.js`, `pages/Gestion.jsx`, `pages/Panel.jsx` | Clientas de WhatsApp aparecen como "Llegó por WhatsApp (sin correo)" |
+
+**Después de actualizar:** detén el backend, `cd backend` y `npm run db:init` (agrega las
+tablas nuevas sin tocar tus datos), luego `npm run dev`. Reinicia también el frontend.
+Para conectarlo a Meta, sigue [Agente de WhatsApp](#agente-de-whatsapp).
 
 ### Octubre 2026 · Base de datos: de SQLite a PostgreSQL
 

@@ -22,6 +22,7 @@ import MisCitas from "./pages/MisCitas";
 import MisPedidos from "./pages/MisPedidos";
 import Agenda from "./pages/Agenda";
 import Promociones from "./pages/Promociones";
+import WhatsApp from "./pages/WhatsApp";
 import "./styles/global.css";
 
 export default function App() {
@@ -100,6 +101,14 @@ export default function App() {
             element={
               <RutaProtegida rolesPermitidos={["Administrador"]}>
                 <Integraciones />
+              </RutaProtegida>
+            }
+          />
+          <Route
+            path="/panel/whatsapp"
+            element={
+              <RutaProtegida rolesPermitidos={["Administrador"]}>
+                <WhatsApp />
               </RutaProtegida>
             }
           />

@@ -146,6 +146,23 @@ export const api = {
     solicitud("/integraciones/google/prueba", { metodo: "DELETE", body: payload, token }),
   ocupacionGoogle: (token) => solicitud("/integraciones/google/ocupacion", { token }),
 
+  // Agente de WhatsApp (Administrador)
+  whatsappEstado: (token) => solicitud("/whatsapp/estado", { token }),
+  whatsappProbar: (token) => solicitud("/whatsapp/probar", { metodo: "POST", token }),
+  whatsappGuardarConfig: (payload, token) => solicitud("/whatsapp/config", { metodo: "PUT", body: payload, token }),
+  whatsappConversaciones: (token) => solicitud("/whatsapp/conversaciones", { token }),
+  whatsappConversacion: (telefono, token) => solicitud(`/whatsapp/conversaciones/${telefono}`, { token }),
+  whatsappResponder: (telefono, texto, token) =>
+    solicitud(`/whatsapp/conversaciones/${telefono}/responder`, { metodo: "POST", body: { texto }, token }),
+  whatsappDevolverAlBot: (telefono, token) =>
+    solicitud(`/whatsapp/conversaciones/${telefono}/bot`, { metodo: "POST", token }),
+  whatsappMarcarAtendida: (telefono, token) =>
+    solicitud(`/whatsapp/conversaciones/${telefono}/atendida`, { metodo: "POST", token }),
+  whatsappSimular: (payload, token) => solicitud("/whatsapp/simulador", { metodo: "POST", body: payload, token }),
+  whatsappSimulacion: (telefono, token) => solicitud(`/whatsapp/simulador/${telefono}`, { token }),
+  whatsappReiniciarSimulacion: (telefono, token) =>
+    solicitud(`/whatsapp/simulador/${telefono}`, { metodo: "DELETE", token }),
+
   // Reservas y abono
   crearReserva: (payload, token) => solicitud("/reservas", { metodo: "POST", body: payload, token }),
   obtenerReserva: (codigo, token) => solicitud(`/reservas/${codigo}`, { token }),
@@ -220,3 +237,15 @@ export const api = {
         (excluir ? `&excluir=${excluir}` : "")
     ),
 };
+
+/** Imagen que envio una clienta por WhatsApp (pasa por el backend, que tiene la llave de Meta) */
+export async function descargarMediaWhatsapp(idMedia, token) {
+  const respuesta = await fetch(`${API_URL}/whatsapp/media/${idMedia}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!respuesta.ok) {
+    const datos = await respuesta.json().catch(() => ({}));
+    throw new Error(datos.error || "No se pudo abrir el archivo");
+  }
+  return URL.createObjectURL(await respuesta.blob());
+}

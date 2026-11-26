@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api, urlImagen } from "../api/client";
-import { formatearPrecio } from "../utils/formato";
+import { correoVisible, formatearPrecio } from "../utils/formato";
 import BarraSitio from "../components/marca/BarraSitio";
 import SubnavPanel from "../components/marca/SubnavPanel";
 import PieMarca from "../components/marca/PieMarca";
@@ -155,7 +155,7 @@ export function GestionReservas() {
                     {r.servicio} <small>con {r.profesional}</small>
                   </p>
                   <p className="gestion-meta">
-                    {r.cliente} · {r.telefono_cliente || r.email_cliente} · <code>{r.codigo_cita}</code>
+                    {r.cliente} · {r.telefono_cliente || correoVisible(r.email_cliente)} · <code>{r.codigo_cita}</code>
                   </p>
                   <p className="gestion-meta">
                     Abono {formatearPrecio(r.monto_abono)} ({r.metodo_abono === "WEBPAY" ? "Webpay" : "transferencia"}) ·
@@ -316,7 +316,7 @@ function FichaClienta({ id, token }) {
         {c.es_invitado ? <span className="etiqueta-invitada">Sin cuenta</span> : null}
       </h2>
       <p className="ficha-contacto">
-        {c.email}
+        {correoVisible(c.email)}
         {c.telefono && ` · ${c.telefono}`}
         {wsp && (
           <a href={wsp} target="_blank" rel="noreferrer" className="boton-texto gestion-wsp">
@@ -466,7 +466,7 @@ export function GestionPedidos() {
                       </li>
                     ))}
                   </ul>
-                  <p className="gestion-meta">{p.telefono_cliente || p.email_cliente}</p>
+                  <p className="gestion-meta">{p.telefono_cliente || correoVisible(p.email_cliente)}</p>
                   {p.notas && <p className="gestion-nota">“{p.notas}”</p>}
                   {p.motivo_anulacion && <p className="gestion-nota">{p.motivo_anulacion}</p>}
                 </div>

@@ -404,6 +404,7 @@ module.exports = {
   reagendar,
   cancelar,
   misCitas,
+  citaDeLaClienta,
   vistaPublica,
   vistaAdmin,
   errorHttp,

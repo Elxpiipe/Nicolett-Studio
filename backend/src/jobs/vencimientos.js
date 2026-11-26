@@ -39,6 +39,8 @@ async function revisar() {
   try {
     const codigos = await vencerPendientes(ahoraChile().texto);
     if (codigos.length) console.log(`Reservas vencidas por falta de abono: ${codigos.join(", ")}`);
+    // Si la reserva se hizo por WhatsApp, se le avisa por ahi que la hora se libero
+    for (const codigo of codigos) require("../whatsapp/avisos").notificarEnSegundoPlano("reservaVencida", codigo);
     const pedidos = await ventaModel.vencerPendientes(ahoraChile().texto); // devuelve el stock apartado
     if (pedidos.length) console.log(`Pedidos vencidos sin pago (stock devuelto): ${pedidos.join(", ")}`);
   } catch (err) {

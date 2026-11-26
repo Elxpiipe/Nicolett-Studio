@@ -122,6 +122,8 @@ async function enviarCorreoRecuperacion({ destinatario, nombre, enlaceRecuperaci
  */
 async function enviarCorreo({ destinatario, asunto, texto, html }) {
   if (!destinatario) return {};
+  // Clientas creadas por WhatsApp: no tienen correo (se les avisa por el chat)
+  if (/@whatsapp\.invalid$/i.test(destinatario)) return {};
   const datosCorreo = {
     from: process.env.SMTP_FROM || '"Nicolett Studio Fantasy" <no-responder@nicolett.cl>',
     to: destinatario,

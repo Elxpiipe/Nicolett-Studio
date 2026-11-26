@@ -210,9 +210,13 @@ const NOTIFICACIONES = {
 /** Dispara un correo sin esperar ni bloquear la respuesta */
 function notificar(tipo, codigo) {
   // Fuera de cualquier transaccion: el correo se arma con lo ya guardado
-  db.enSegundoPlano(() =>
-    NOTIFICACIONES[tipo](codigo).catch((err) => console.warn(`Notificación ${tipo} (${codigo}) falló: ${err.message}`))
-  );
+  db.enSegundoPlano(() => {
+    NOTIFICACIONES[tipo](codigo).catch((err) => console.warn(`Notificación ${tipo} (${codigo}) falló: ${err.message}`));
+    // Reservas hechas por WhatsApp: el aviso tambien llega por ese chat
+    require("../whatsapp/avisos")
+      .notificar(tipo, codigo)
+      .catch((err) => console.warn(`[WhatsApp] Aviso ${tipo} (${codigo}) falló: ${err.message}`));
+  });
 }
 
 module.exports = { notificar, NOTIFICACIONES, plantilla };

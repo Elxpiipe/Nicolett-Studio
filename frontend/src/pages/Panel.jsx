@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api/client";
+import { correoVisible } from "../utils/formato";
 import BarraSitio from "../components/marca/BarraSitio";
 import SubnavPanel from "../components/marca/SubnavPanel";
 import PieMarca from "../components/marca/PieMarca";
@@ -347,7 +348,7 @@ function PanelAdministracionUsuarios({ token }) {
               ) : (
                 <tr key={u.id_usuario}>
                   <td>{u.nombres} {u.apellidos}</td>
-                  <td>{u.email}</td>
+                  <td>{correoVisible(u.email)}</td>
                   <td>{u.telefono || "—"}</td>
                   <td>{u.rut || "—"}</td>
                   <td>{u.rol}</td>

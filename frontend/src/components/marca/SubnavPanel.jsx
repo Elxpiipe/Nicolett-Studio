@@ -17,7 +17,8 @@ export default function SubnavPanel() {
       { to: "/tienda", texto: "Tienda" },
       { to: "/panel/promociones", texto: "Promociones" },
       { to: "/panel/equipo", texto: "Equipo y horarios" },
-      { to: "/panel/integraciones", texto: "Google Calendar" }
+      { to: "/panel/integraciones", texto: "Google Calendar" },
+      { to: "/panel/whatsapp", texto: "WhatsApp" }
     );
   }
   if (usuario.rol === "Profesional") {

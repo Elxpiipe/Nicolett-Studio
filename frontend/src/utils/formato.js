@@ -84,3 +84,8 @@ export function leerLineas(texto) {
     .map((l) => l.trim())
     .filter(Boolean);
 }
+
+/** Las clientas que llegaron por WhatsApp no tienen correo: el sistema les asigna uno interno */
+export function correoVisible(email) {
+  return /@whatsapp\.invalid$/i.test(email || "") ? "Llegó por WhatsApp (sin correo)" : email;
+}
