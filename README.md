@@ -14,6 +14,12 @@ salón de belleza en Buin (Proyecto APT, DUOC UC).
   **Webpay Plus** o por transferencia; las citas se escriben solas en Google Calendar.
 - **Tienda online:** productos de cuidado capilar con carrito, pago con Webpay y retiro
   en el salón; stock administrable.
+- **Agente de WhatsApp:** las clientas reservan, revisan sus citas y consultan precios
+  por WhatsApp, con las mismas reglas y la misma agenda que la página.
+
+**¿Primera vez?** En Windows basta con instalar Node.js y PostgreSQL y hacer doble clic
+en `1-instalar.bat` y luego en `2-iniciar.bat`. Ver
+[Instalar en un PC nuevo (Windows)](#instalar-en-un-pc-nuevo-windows).
 
 ---
 
@@ -21,8 +27,8 @@ salón de belleza en Buin (Proyecto APT, DUOC UC).
 
 1. [Stack](#stack)
 2. [Estado del proyecto](#estado-del-proyecto)
-3. [Requisitos](#requisitos)
-4. [Levantar el proyecto (paso a paso)](#levantar-el-proyecto-paso-a-paso)
+3. [Instalar en un PC nuevo (Windows)](#instalar-en-un-pc-nuevo-windows)
+4. [Instalación manual (paso a paso)](#instalación-manual-paso-a-paso)
 5. [Cuentas de prueba](#cuentas-de-prueba)
 6. [Recorrido sugerido para la demo](#recorrido-sugerido-para-la-demo)
 7. [Estructura de carpetas](#estructura-de-carpetas)
@@ -56,6 +62,7 @@ salón de belleza en Buin (Proyecto APT, DUOC UC).
 | Correo | nodemailer (Gmail o cuenta de prueba Ethereal) |
 | Calendario | Google Calendar API con cuenta de servicio (google-auth-library) |
 | Pagos | Webpay Plus de Transbank (transbank-sdk), ambiente de integración |
+| WhatsApp | WhatsApp Cloud API de Meta (webhook + envío de mensajes) |
 
 ## Estado del proyecto
 
@@ -71,52 +78,125 @@ salón de belleza en Buin (Proyecto APT, DUOC UC).
 | Abono por categoría ($10.000 cabello, $5.000 resto) | ✅ Editable en el catálogo |
 | Tienda: productos, carrito, pago con Webpay, stock y pedidos | ✅ |
 | 3.3 Mis citas (cambiar hora con regla de 48 h, cancelar, historial) y Mis pedidos (repetir pedido) | ✅ |
-| 4. Agente de WhatsApp (reservar, mis citas, precios, horario, hablar con una persona) | ✅ Probado con el simulador del panel. Falta conectarlo al número del salón en Meta |
+| 4. Agente de WhatsApp (reservar, mis citas, precios, horario, hablar con una persona) | ✅ Probado con el número de prueba de Meta. Falta pasarlo al número del salón |
+| Instalador para Windows (`1-instalar.bat`, `2-iniciar.bat`) | ✅ |
 
-## Requisitos
+## Instalar en un PC nuevo (Windows)
 
-- **Node.js 22 LTS**: <https://nodejs.org>. Verifica con `node -v`.
-  En Windows puedes tener varias versiones con
-  [nvm-windows](https://github.com/coreybutler/nvm-windows) (`nvm install 22` y `nvm use 22`).
-- **PostgreSQL 14 o superior**: <https://www.postgresql.org/download/>. En Windows el
-  instalador trae pgAdmin para mirar la base de datos. Anota la clave que le pongas al
-  usuario `postgres`.
-- **npm** (viene con Node).
-- **Git**.
+Estos pasos sirven para un computador donde nunca se ha instalado nada del proyecto.
 
-## Levantar el proyecto (paso a paso)
+### 1. Instala los programas (una sola vez)
 
-Se necesitan **dos terminales**: una para el backend y otra para el frontend.
+1. **Node.js 22 LTS:** descárgalo de <https://nodejs.org> (botón "LTS") e instálalo con
+   las opciones que vienen marcadas.
+2. **PostgreSQL** (versión 14 o más nueva; la 16, 17 o 18 sirven): descárgalo de
+   <https://www.postgresql.org/download/windows/> (instalador de EDB). Durante la
+   instalación:
+   - deja el puerto **5432** y marca **pgAdmin**;
+   - cuando pida la clave del usuario `postgres`, elige una sin símbolos raros
+     (por ejemplo `Nicolett2026`) y **anótala**: el instalador del proyecto te la va a pedir;
+   - al final, si ofrece abrir "Stack Builder", ciérralo: no hace falta.
+
+### 2. Copia el proyecto
+
+Descomprime el ZIP del proyecto (o clónalo con Git) en una carpeta, por ejemplo
+`C:\Users\TuNombre\nicolett-sync`. Adentro deben quedar las carpetas `backend` y
+`frontend` y los archivos `1-instalar.bat`, `2-iniciar.bat` y `3-whatsapp-ngrok.bat`.
+
+Si vienes de otro PC con datos reales, mira además
+[Llevar los datos y las fotos a otro PC](#llevar-los-datos-y-las-fotos-a-otro-pc).
+
+### 3. Instala el proyecto: `1-instalar.bat`
+
+Doble clic en **`1-instalar.bat`**. Hace todo esto solo:
+
+1. Revisa que Node.js esté instalado.
+2. Descarga las dependencias del backend (`npm install`).
+3. Te pide el usuario y la **clave de PostgreSQL**, prueba la conexión, crea la base
+   `nicolett_studio` y arma el archivo `backend/.env` (con un `JWT_SECRET` aleatorio).
+4. Crea las tablas.
+5. Pregunta si quieres **datos de demostración** (servicios, profesionales, productos y
+   las [cuentas de prueba](#cuentas-de-prueba)). Si en `backend/db/` hay un `nicolett.db`
+   antiguo, ofrece copiar esos datos.
+6. Descarga las dependencias del frontend.
+
+Tarda unos minutos la primera vez. Se puede volver a ejecutar sin perder datos: si el
+`.env` ya funciona, no lo toca.
+
+> Si Windows muestra "Windows protegió su PC", toca **Más información → Ejecutar de
+> todas formas**. Pasa con cualquier `.bat` descargado de internet.
+
+### 4. Abre el sistema: `2-iniciar.bat`
+
+Doble clic en **`2-iniciar.bat`**. Abre dos ventanas negras (backend y frontend) y, cuando
+todo está listo, el navegador en <http://localhost:5173>. No cierres esas ventanas
+mientras uses el sistema; para apagarlo, ciérralas.
+
+Cada vez que arranca, el backend ejecuta `npm run db:init`: si alguien agregó tablas o
+columnas nuevas al proyecto, se crean solas sin borrar datos.
+
+### 5. WhatsApp (opcional): `3-whatsapp-ngrok.bat`
+
+Solo si vas a probar el agente con WhatsApp de verdad. Primero sigue
+[Conectarlo a WhatsApp](#conectarlo-a-whatsapp-con-el-número-de-prueba-de-meta) para
+crear la app en Meta, instalar ngrok y completar las variables `WHATSAPP_*` del `.env`.
+Después, con el sistema corriendo, doble clic en **`3-whatsapp-ngrok.bat`** y deja esa
+ventana abierta. Para probar el agente sin Meta no hace falta: usa el simulador del panel.
+
+### Opcional: Google Calendar y correo
+
+- **Google Calendar:** copia la carpeta `backend/credenciales/` (el JSON de la cuenta de
+  servicio) desde un PC donde ya funcione, o crea una nueva con
+  [Conectar Google Calendar](#conectar-google-calendar).
+- **Correo real:** completa `SMTP_PASS` en `backend/.env` con la contraseña de aplicación
+  de Gmail ([Correo real con Gmail](#correo-real-con-gmail)). Sin eso el sistema funciona,
+  pero los correos solo se ven como "vista previa" en la ventana del backend.
+
+### Llevar los datos y las fotos a otro PC
+
+El instalador deja una base nueva. Para pasar **los datos reales** (clientas, citas,
+productos) desde el PC donde ya están:
+
+1. En el PC de origen, abre una terminal y respalda la base (cambia `18` por tu versión
+   de PostgreSQL):
+   ```
+   "C:\Program Files\PostgreSQL\18\bin\pg_dump.exe" -U postgres -F c -f nicolett.backup nicolett_studio
+   ```
+2. Copia al PC nuevo: el archivo `nicolett.backup`, la carpeta `backend/uploads/` (las
+   fotos) y, si se usan, `backend/credenciales/` y los valores de `SMTP_*` y `WHATSAPP_*`
+   del `.env`.
+3. En el PC nuevo ejecuta `1-instalar.bat` y en "Datos iniciales" elige **no cargar
+   datos de demostración**. Luego restaura:
+   ```
+   "C:\Program Files\PostgreSQL\18\bin\pg_restore.exe" -U postgres -d nicolett_studio --clean --if-exists nicolett.backup
+   ```
+4. Ejecuta `2-iniciar.bat`.
+
+Las fotos no viajan dentro de la base: la base solo guarda la ruta. Por eso hay que
+copiar `backend/uploads/` aparte.
+
+## Instalación manual (paso a paso)
+
+Para macOS o Linux, o si prefieres hacerlo sin los `.bat`. Necesitas **Node.js 22 LTS**
+y **PostgreSQL 14 o superior** instalados, y **dos terminales**: una para el backend y
+otra para el frontend.
 
 ### 1. Backend (terminal 1)
 
 ```bash
 cd backend
 npm install
+node scripts/configurar.js
 ```
 
-Crea el archivo `.env` copiando el de ejemplo:
+`configurar.js` te pide la clave de PostgreSQL, crea la base `nicolett_studio` y el
+archivo `backend/.env`. Si prefieres hacerlo a mano: copia `.env.example` como `.env`,
+pon la clave de `postgres` en `DATABASE_URL`, cambia `JWT_SECRET` por un texto largo y
+aleatorio, y crea la base con `createdb -U postgres nicolett_studio` (o en pgAdmin:
+clic derecho en *Databases* → *Create* → `nicolett_studio`).
 
-```bash
-# Windows (PowerShell)
-Copy-Item .env.example .env
-# macOS / Linux
-cp .env.example .env
-```
-
-Abre `backend/.env` y cambia `JWT_SECRET` por cualquier texto largo y aleatorio.
-En `DATABASE_URL` pon la clave de tu usuario `postgres`. Lo demás funciona tal cual
-para desarrollo.
-
-Crea la base vacía en PostgreSQL (una sola vez). Con pgAdmin: clic derecho en
-*Databases* → *Create* → nombre `nicolett_studio`. O por consola:
-
-```bash
-createdb -U postgres nicolett_studio
-```
-
-Crea las tablas con **datos de demostración** (servicios reales de Instagram,
-3 profesionales de ejemplo con horario, productos de ejemplo, un admin y una clienta):
+Crea las tablas con **datos de demostración** (servicios reales, 3 profesionales de
+ejemplo con horario, productos, un admin y una clienta):
 
 ```bash
 npm run demo
@@ -136,7 +216,7 @@ Puedes comprobarlo abriendo <http://localhost:4000/api/salud>.
 
 ```bash
 npm run db:init
-npm run seed:servicios        # opcional: servicios y precios reales de Instagram
+npm run seed:servicios        # opcional: servicios y precios reales
 npm run crear-admin -- "Nombre" "Apellido" "correo@dominio.cl" "ClaveSegura1"
 ```
 </details>
@@ -156,6 +236,10 @@ Abre <http://localhost:5173>.
 
 | Dónde | Comando | Qué hace |
 |-------|---------|----------|
+| raíz | `1-instalar.bat` | Instalación completa en Windows (dependencias, `.env`, base y datos) |
+| raíz | `2-iniciar.bat` | Abre backend, frontend y el navegador |
+| raíz | `3-whatsapp-ngrok.bat` | Abre el túnel de ngrok para WhatsApp |
+| backend | `node scripts/configurar.js` | Pide la clave de PostgreSQL, crea la base y el `backend/.env` |
 | backend | `npm run dev` | Servidor con recarga automática |
 | backend | `npm start` | Servidor normal |
 | backend | `npm run db:init` | Crea o actualiza las tablas en PostgreSQL (no borra datos) |
@@ -170,8 +254,9 @@ Abre <http://localhost:5173>.
 | frontend | `npm run dev` | Servidor de desarrollo de Vite |
 | frontend | `npm run build` | Compila para producción en `frontend/dist` |
 
-> La base de datos se migra sola al iniciar el backend: si alguien actualiza el
-> proyecto, las columnas nuevas se agregan sin perder datos.
+> Después de traer cambios de otra persona, ejecuta `npm run db:init` en `backend`
+> (o abre el sistema con `2-iniciar.bat`, que lo hace solo): agrega tablas y columnas
+> nuevas sin perder datos.
 
 ## Cuentas de prueba
 
@@ -213,10 +298,14 @@ Creadas por `npm run demo`:
 
 ```
 nicolett-sync/
+├── 1-instalar.bat                   # Instalación en Windows
+├── 2-iniciar.bat                    # Abre el sistema
+├── 3-whatsapp-ngrok.bat             # Túnel para WhatsApp
 ├── backend/
 │   ├── server.js                    # Arranque de Express y registro de rutas
 │   ├── credenciales/                # JSON de Google (NO se sube a git)
 │   ├── uploads/                     # Fotos subidas (servicios, profesionales)
+│   ├── scripts/configurar.js        # Asistente: clave de PostgreSQL, base y .env
 │   ├── db/
 │   │   ├── schema.sql               # Modelo de datos original del informe (SQLite)
 │   │   ├── schema.postgres.sql      # Esquema actual en PostgreSQL (incluye todos los cambios)
@@ -840,9 +929,13 @@ Todo está hecho de forma genérica y se ajusta desde el panel cuando lleguen lo
 
 | Problema | Solución |
 |----------|----------|
-| `Falta JWT_SECRET en las variables de entorno` | No existe `backend/.env`. Cópialo desde `.env.example`. |
+| `1-instalar.bat` dice que no encuentra Node.js | Instala Node.js 22 LTS, **cierra y vuelve a abrir** el `.bat` (Windows solo reconoce Node en ventanas nuevas). |
+| `1-instalar.bat` dice "PostgreSQL no responde" | PostgreSQL no está instalado o su servicio está detenido: Windows + R → `services.msc` → `postgresql-x64-XX` → Iniciar. |
+| "La clave no es correcta para ese usuario" | Es la clave que elegiste al instalar PostgreSQL. Si no la recuerdas, entra a pgAdmin (suele tenerla guardada), abre **Query Tool** y ejecuta `ALTER USER postgres PASSWORD 'NuevaClave';`. |
+| `2-iniciar.bat` abre el navegador pero sale "Failed to fetch" | Mira la ventana "Backend": ahí aparece el error. Lo más común es PostgreSQL detenido. |
+| `Falta JWT_SECRET en las variables de entorno` | No existe `backend/.env`. Ejecuta `1-instalar.bat` o `node scripts/configurar.js`. |
 | `No se pudo usar PostgreSQL (password authentication failed...)` | La clave de `DATABASE_URL` no es la del usuario `postgres`. |
-| `No se pudo usar PostgreSQL (database "nicolett_studio" does not exist)` | Falta crear la base: `createdb -U postgres nicolett_studio`. |
+| `No se pudo usar PostgreSQL (database "nicolett_studio" does not exist)` | Falta crear la base: ejecuta `node scripts/configurar.js` en `backend` (o `createdb -U postgres nicolett_studio`). |
 | `La base de datos no tiene las tablas` | Ejecuta `npm run db:init` (o `npm run demo`). |
 | Aviso al instalar `better-sqlite3` | Solo se usa para `npm run db:migrar-sqlite`. Si falla (por ejemplo con Node 24), la app funciona igual. |
 | Webpay vuelve a una página que no carga | El frontend debe estar corriendo en `FRONTEND_URL` y el backend en `BACKEND_URL`. |
@@ -893,7 +986,7 @@ git push -u origin main
 Luego agrega a sus compañeros en GitHub → Settings → Collaborators.
 
 **Cada integrante** clona el repositorio y crea **sus propios** `.env` y base de datos
-(ver [Levantar el proyecto](#levantar-el-proyecto-paso-a-paso)):
+(ver [Instalar en un PC nuevo](#instalar-en-un-pc-nuevo-windows)):
 
 ```bash
 git clone https://github.com/USUARIO/nicolett-sync.git
@@ -915,6 +1008,19 @@ git push -u origin modulo-3-2-frontend   # luego abrir el Pull Request en GitHub
 > y `npm run dev`. Cada persona tiene su propia base PostgreSQL: nunca compartan claves.
 
 ## Registro de cambios
+
+### Noviembre 2026 · Instalador para Windows y aviso de pago por WhatsApp
+
+| Archivo | Qué cambió |
+|---------|------------|
+| `1-instalar.bat`, `2-iniciar.bat`, `3-whatsapp-ngrok.bat` | **Nuevos:** instalar y abrir el sistema con doble clic en un PC desde cero |
+| `backend/scripts/configurar.js` | **Nuevo:** pide la clave de PostgreSQL, crea la base y el `backend/.env` |
+| `backend/src/controllers/pagos.controller.js` | Al aprobarse el pago de una reserva hecha por WhatsApp, envía el aviso "Tu hora está confirmada" directamente |
+| `backend/src/whatsapp/avisos.js` | El aviso no se repite si se dispara dos veces, y la ventana del backend muestra si se envió o por qué no |
+| `README.md` | Instalación en un PC nuevo, uso de los `.bat` y cómo llevar datos y fotos a otro PC |
+
+**Para actualizar:** copia los archivos encima del proyecto y abre el sistema con
+`2-iniciar.bat`. No hay cambios en la base de datos.
 
 ### Noviembre 2026 · Agente de WhatsApp
 

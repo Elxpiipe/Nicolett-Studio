@@ -11,6 +11,8 @@ backend/db/*.db
 backend/db/*.db-journal
 backend/db/*.db-wal
 backend/db/*.db-shm
+# Respaldos de PostgreSQL (traen datos de clientas)
+*.backup
 backend/uploads/**/*
 !backend/uploads/**/
 !backend/uploads/**/.gitkeep
